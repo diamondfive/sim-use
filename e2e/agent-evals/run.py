@@ -37,7 +37,7 @@ sys.path.insert(0, str(EVALS_DIR))
 from framework import agent as agent_mod
 from framework import playground as playground_mod
 from framework import verify as verify_mod
-from framework.device import Sim
+from framework.device import Sim, SimUseError
 from framework.report import RunReport
 
 
@@ -138,6 +138,13 @@ def run_case(case: dict, sim: Sim, args, out_dir: Path) -> dict:
         )
     except playground_mod.ResetError as exc:
         verdict["error"] = f"reset failed: {exc}"
+        return verdict
+    # The relaunch is intentional; without re-baselining, the agent's first
+    # command reports it as a crash and the skill tells the agent to stop.
+    try:
+        sim.run("app-state", "--reset")
+    except SimUseError as exc:
+        verdict["error"] = f"crash-detection reset failed: {exc}"
         return verdict
 
     try:
