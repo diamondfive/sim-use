@@ -41,7 +41,12 @@ struct ResizeModeTests {
 
         func end() async {
             if process.isRunning { process.terminate() }
-            process.waitUntilExit()
+            // Poll instead of `waitUntilExit()`: after `terminate()` on a
+            // process launched off the main thread, it can sleep in its
+            // run loop forever even though the child is already reaped.
+            while process.isRunning {
+                try? await Task.sleep(nanoseconds: 50_000_000)
+            }
             // CoreDevice tears the display's session down shortly after
             // the client goes away; wait for it so the next test (or
             // suite) starts from a resolved state.
