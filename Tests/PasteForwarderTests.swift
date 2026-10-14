@@ -87,10 +87,10 @@ struct PasteForwarderTests {
         ) throws -> Void = AndroidPasteCommand.performPaste
     }
 
-    // MARK: - Daemon bypass
+    // MARK: - Caller-side input is inlined for the daemon
 
-    @Test("--stdin sets daemonBypass on both surfaces")
-    func stdinTriggersDaemonBypass() throws {
+    @Test("--stdin does not bypass the daemon on either surface")
+    func stdinGoesThroughDaemon() throws {
         let top = try Paste.parse([
             "--stdin",
             "--udid", "9CD7C6E7-45B3-4E59-BBF2-4D12A9457CD0",
@@ -99,8 +99,34 @@ struct PasteForwarderTests {
             "--stdin",
             "--udid", "9CD7C6E7-45B3-4E59-BBF2-4D12A9457CD0",
         ])
-        #expect(top.daemonBypass)
-        #expect(sub.daemonBypass)
+        #expect(top.daemonBypass == false)
+        #expect(sub.daemonBypass == false)
+    }
+
+    @Test("--file is read in the client and forwarded as the positional, keeping the other flags")
+    func fileIsInlined() throws {
+        let path = FileManager.default.temporaryDirectory
+            .appendingPathComponent("paste-forward-\(UUID().uuidString).txt").path
+        try "日本語\n".write(toFile: path, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let udid = "9CD7C6E7-45B3-4E59-BBF2-4D12A9457CD0"
+        let argv = ["paste", "--file", path, "--replace", "--device", udid]
+        let top = try Paste.parse(Array(argv.dropFirst()))
+
+        let forwarded = try top.daemonArguments(from: argv)
+
+        #expect(forwarded == ["paste", "--replace", "--device", udid, "--", "日本語\n"])
+        let daemonSide = try Paste.parse(Array(forwarded.dropFirst()))
+        #expect(daemonSide.text == "日本語\n")
+        #expect(daemonSide.replace)
+        #expect(daemonSide.inputFile == nil)
+    }
+
+    @Test("An unreadable --file fails in the client with a readable message")
+    func unreadableFileFails() throws {
+        let argv = ["paste", "--file", "/nonexistent/in.txt", "--device", "9CD7C6E7-45B3-4E59-BBF2-4D12A9457CD0"]
+        let top = try Paste.parse(Array(argv.dropFirst()))
+        #expect(throws: CLIError.self) { try top.daemonArguments(from: argv) }
     }
 
     // MARK: - Flag-surface parity

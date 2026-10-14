@@ -120,18 +120,30 @@ public struct IOSSimBatchCommand: SimUseExecutableCommand {
 
     public var simulatorUDIDForDaemon: String? { device.resolved }
 
-    // The daemon child process runs with stdin pinned to /dev/null and
-    // its CWD is the daemon's, not the caller's, so two batch input
-    // sources cannot survive a daemon round-trip:
-    //   * `--stdin` reads zero lines on the daemon side and surfaces as
-    //     the opaque `ArgumentParser.ValidationError error 1` wrapper
-    //     around `"No executable steps found."` (LINEIOS-216940).
-    //   * `--file <relative>` resolves against the daemon's CWD instead
-    //     of the caller's, so a working path on the client side becomes
-    //     a missing file once forwarded.
-    // Bypass the daemon for both modes; `--step` flags remain
-    // daemon-routable as today.
-    public var daemonBypass: Bool { useStdin || file != nil }
+    // The daemon runs with stdin on /dev/null (LINEIOS-216940) and in its
+    // own working directory, so `--stdin` and a relative `--file` cannot
+    // be read there. Read them here and forward the steps as `--step`.
+    // Running in-process instead drops every touch on the CoreDevice
+    // (dtuhidd) HID transport; see `DaemonInlineInput`.
+    public func daemonArguments(from arguments: [String]) throws -> [String] {
+        guard useStdin || file != nil else { return arguments }
+        return try Self.inliningSteps(readStepSource(), into: arguments)
+    }
+
+    /// `arguments` without `--stdin` / `--file`, plus one `--step` per
+    /// executable line of `rawLines`. The `=` form keeps a step from being
+    /// parsed as an option.
+    static func inliningSteps(_ rawLines: [String], into arguments: [String]) throws -> [String] {
+        let stepLines = executableStepLines(rawLines)
+        guard !stepLines.isEmpty else {
+            throw CLIError(errorDescription: "No executable steps found.")
+        }
+        let withoutSource = DaemonInlineInput.removingOption(
+            "file",
+            from: DaemonInlineInput.removingFlag("stdin", from: arguments)
+        )
+        return DaemonInlineInput.insertingOptions(stepLines.map { "--step=\($0)" }, into: withoutSource)
+    }
 
     public func validate() throws {
         try Self.validateOptions(
@@ -279,24 +291,25 @@ public struct IOSSimBatchCommand: SimUseExecutableCommand {
     }
 
     private func loadStepLines() throws -> [String] {
-        let rawLines: [String]
-        if !steps.isEmpty {
-            rawLines = steps
-        } else if let file {
-            let contents: String
-            do {
-                contents = try String(contentsOfFile: file, encoding: .utf8)
-            } catch {
-                // CLIError so the message survives our run() catch —
-                // loadStepLines is reached from execute(), not validate.
-                throw CLIError(errorDescription: "Failed to read step file '\(file)': \(error.localizedDescription)")
-            }
-            rawLines = contents.components(separatedBy: .newlines)
-        } else {
-            rawLines = readStdinLines()
-        }
+        Self.executableStepLines(steps.isEmpty ? try readStepSource() : steps)
+    }
 
-        return rawLines
+    /// Raw lines from `--file` or `--stdin`.
+    private func readStepSource() throws -> [String] {
+        guard let file else { return readStdinLines() }
+        let contents: String
+        do {
+            contents = try String(contentsOfFile: file, encoding: .utf8)
+        } catch {
+            // CLIError so the message survives our run() catch — this is
+            // reached from execute() or the daemon dispatch, not validate.
+            throw CLIError(errorDescription: "Failed to read step file '\(file)': \(error.localizedDescription)")
+        }
+        return contents.components(separatedBy: .newlines)
+    }
+
+    private static func executableStepLines(_ rawLines: [String]) -> [String] {
+        rawLines
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty && !$0.hasPrefix("#") }
     }

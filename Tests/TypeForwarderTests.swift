@@ -77,10 +77,13 @@ struct TypeForwarderTests {
         ) throws -> Void = AndroidTypeCommand.performType
     }
 
-    // MARK: - Daemon bypass for --stdin
+    // MARK: - Caller-side input is inlined for the daemon
 
-    @Test("--stdin sets daemonBypass on both surfaces")
-    func stdinTriggersDaemonBypass() throws {
+    // On the CoreDevice (dtuhidd) HID transport a short-lived process
+    // exits before dtuhidd activates its connection, so `--stdin` must go
+    // through the daemon like every other input (see DaemonInlineInput).
+    @Test("--stdin does not bypass the daemon on either surface")
+    func stdinGoesThroughDaemon() throws {
         let top = try Type.parse([
             "--stdin",
             "--udid", "9CD7C6E7-45B3-4E59-BBF2-4D12A9457CD0",
@@ -89,8 +92,38 @@ struct TypeForwarderTests {
             "--stdin",
             "--udid", "9CD7C6E7-45B3-4E59-BBF2-4D12A9457CD0",
         ])
-        #expect(top.daemonBypass)
-        #expect(sub.daemonBypass)
+        #expect(top.daemonBypass == false)
+        #expect(sub.daemonBypass == false)
+    }
+
+    @Test("--file is read in the client and forwarded as the positional on both surfaces")
+    func fileIsInlined() throws {
+        let path = FileManager.default.temporaryDirectory
+            .appendingPathComponent("type-forward-\(UUID().uuidString).txt").path
+        try "-5 apples\nline 2\n".write(toFile: path, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let udid = "9CD7C6E7-45B3-4E59-BBF2-4D12A9457CD0"
+
+        let topArgv = ["type", "--file", path, "--device", udid]
+        let top = try Type.parse(Array(topArgv.dropFirst()))
+        let topForwarded = try top.daemonArguments(from: topArgv)
+        #expect(topForwarded == ["type", "--device", udid, "--", "-5 apples\nline 2\n"])
+        let topDaemonSide = try Type.parse(Array(topForwarded.dropFirst()))
+        #expect(topDaemonSide.text == "-5 apples\nline 2\n")
+        #expect(topDaemonSide.inputFile == nil)
+
+        let subArgv = ["ios", "type", "--file", path, "--device", udid]
+        let sub = try IOSSimTypeCommand.parse(Array(subArgv.dropFirst(2)))
+        let subForwarded = try sub.daemonArguments(from: subArgv)
+        #expect(subForwarded == ["ios", "type", "--device", udid, "--", "-5 apples\nline 2\n"])
+        #expect(try IOSSimTypeCommand.parse(Array(subForwarded.dropFirst(2))).text == "-5 apples\nline 2\n")
+    }
+
+    @Test("Positional text is forwarded unchanged")
+    func positionalIsUnchanged() throws {
+        let argv = ["type", "hello", "--device", "9CD7C6E7-45B3-4E59-BBF2-4D12A9457CD0"]
+        let top = try Type.parse(Array(argv.dropFirst()))
+        #expect(try top.daemonArguments(from: argv) == argv)
     }
 
     @Test("Positional text does not set daemonBypass")

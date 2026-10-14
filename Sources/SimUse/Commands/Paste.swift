@@ -124,7 +124,9 @@ struct Paste: SimUseExecutableCommand {
 
     var simulatorUDIDForDaemon: String? { device.resolved }
 
-    var daemonBypass: Bool { useStdin }
+    func daemonArguments(from arguments: [String]) throws -> [String] {
+        try IOSSimPasteCommand.daemonArguments(from: arguments, useStdin: useStdin, inputFile: inputFile)
+    }
 
     func format(_ result: ExecutionResult) -> CommandOutput { .empty }
 
