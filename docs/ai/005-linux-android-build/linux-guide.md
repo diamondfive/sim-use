@@ -1,5 +1,7 @@
 # Linux (Android only)
 
+> Living guide. The design and its decisions are in [000-design.md](000-design.md).
+
 sim-use builds on Linux with the Android backend only. The Android backend
 drives the device through `adb` plus the in-device bridge APK's HTTP server and
 needs none of the Apple frameworks the iOS side is built on, so `Package.swift`

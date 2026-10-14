@@ -12,7 +12,7 @@ import SimUseCore
 /// dyld "does not exist", so we detect that up front and surface an
 /// actionable message.
 ///
-/// Work record: docs/ai/xxxx-xcode27-support/README.md.
+/// Work record: docs/ai/004-xcode27-support/000-investigation.md.
 enum XcodeCompatibility {
     /// Throws an actionable `CLIError` when the selected Xcode does not ship
     /// `SimulatorKit.framework` at any known location. No-op otherwise,

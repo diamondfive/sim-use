@@ -145,12 +145,12 @@ touch step); `SIM_USE_RESIZE_SESSION_CHECK=0` turns it off (read by the
 per-device daemon when it starts). The bundled skill's preflight requires
 sim-use 0.15.0 or newer for this reason. Background:
 [issue #143](https://github.com/lycorp-jp/sim-use/issues/143) and
-`docs/ai/xxxx-resizable-app-session/README.md`.
+`docs/ai/006-resizable-app-session/000-investigation.md`.
 
 ### Linux (Android only)
 
 The Android backend also builds on Linux with a Swift 6 toolchain — iOS
-verbs, video capture, the Viewer and `init` are macOS-only. See [docs/linux.md](docs/linux.md) for what is available, how to
+verbs, video capture, the Viewer and `init` are macOS-only. See [docs/ai/005-linux-android-build/linux-guide.md](docs/ai/005-linux-android-build/linux-guide.md) for what is available, how to
 build and install, and reaching devices from WSL.
 
 ```bash
