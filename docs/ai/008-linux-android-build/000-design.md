@@ -5,7 +5,7 @@
 | **Status** | Implemented (shipped in 0.15.0) |
 | **Anchor date** | 2026-09-11 |
 | **Primary PRs** | #141 (by @iopass4), #147 (continuation and hardening) |
-| **Related** | [linux-guide.md](linux-guide.md) (living user guide), [002-e2e-confidence-suite](../002-e2e-confidence-suite/000-design.md) |
+| **Related** | [linux-guide.md](linux-guide.md) (living user guide), [003-e2e-confidence-suite](../003-e2e-confidence-suite/000-design.md) |
 
 > Backfilled on 2026-10-14 from the PR descriptions of #141 and #147 and from the
 > code. It is a retrospective reconstruction, not a plan written before the work.

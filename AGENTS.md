@@ -85,7 +85,7 @@ E2E suites compile always but skip unless `SIM_USE_E2E=1` (iOS) / `SIM_USE_E2E_A
 
 `make e2e-matrix` validates the host-environment matrix: Xcode 26.x / 27.x × Device Hub closed at boot (`*-sim` legs — the Simulator.app workflow, legacy HID) or open at boot (`*-hub` legs — CoreDevice dtuhidd HID). One leg runs the full suite (default `x27-hub`; `ARGS="--full <leg>|all|none"`), the rest run the smoke tier (`scripts/test-runner.sh --smoke`: describe-ui, tap, type, scroll); legs whose Xcode is missing are skipped. The package builds once on the xcode-select toolchain — each leg only swaps the runtime Xcode via `SIM_USE_TEST_DEVELOPER_DIR` and boots a device matching its iOS generation, with dtuhidd/transport gates before and after the suites so a choreography failure cannot green-run the wrong combination. It quits Device Hub and shuts down every booted simulator, so never run it alongside other simulator work. Per-leg logs + evidence: `.build/e2e-matrix/<timestamp>/`.
 
-Agent-facing behaviour (the bundled skill) has its own natural-language eval layer — see `e2e/agent-evals/README.md` and `docs/ai/002-e2e-confidence-suite/`.
+Agent-facing behaviour (the bundled skill) has its own natural-language eval layer — see `e2e/agent-evals/README.md` and `docs/ai/003-e2e-confidence-suite/`.
 
 ### Verifying a change
 
@@ -108,7 +108,7 @@ Five SwiftPM targets; dependency graph flows in one direction.
 | `SimUse` (executable) | `Sources/SimUse/` | SimUseCore + SimUseVideo + iOSSimBackend + AndroidBackend + FB* |
 | `SimUseLinux` (executable, Linux only) | `Sources/SimUseLinux/` | SimUseCore + AndroidBackend |
 
-On Linux, `Package.swift` declares only `SimUseCore`, `AndroidBackend` (without its three video-capture files) and `SimUseLinux` — see `docs/ai/005-linux-android-build/linux-guide.md`. Linux-only shims live in `Sources/SimUseCore/LinuxCompat.swift`; `swift build` / `swift test` run there directly.
+On Linux, `Package.swift` declares only `SimUseCore`, `AndroidBackend` (without its three video-capture files) and `SimUseLinux` — see `docs/ai/008-linux-android-build/linux-guide.md`. Linux-only shims live in `Sources/SimUseCore/LinuxCompat.swift`; `swift build` / `swift test` run there directly.
 
 `SimUseVideo` holds the platform-neutral host-side video plumbing (H.264 Annex B parsing, passthrough muxing, `AVAssetWriter` encoding, frame utilities) shared by the iOS and Android recording/streaming paths. It must stay FB*-free — anything that needs FBSimulatorControl belongs in `iOSSimBackend` (e.g. the `VideoFrameUtilities.captureScreenshotData` extension), anything adb-shaped in `AndroidBackend`.
 

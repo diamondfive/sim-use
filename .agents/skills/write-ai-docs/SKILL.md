@@ -55,8 +55,10 @@ If yes, write it down.
 
 ### 2. Follow-up on an existing entry
 
-1. Add the next numbered file in the folder, for example
-   `002-review-round-1.md` or `003-downscaled-devices.md`.
+1. Add the next free numbered file in the folder, for example
+   `002-review-round-1.md`. `001` is the action log when the entry has one; a
+   design or investigation record that already holds its outcome has no
+   action log, and its first amendment is `001-<topic>.md`.
 2. Append one line to the **Amendments** section of the `000-*.md` file:
    `- Updated YYYY-MM-DD: <one line> — see [00N-topic.md](00N-topic.md)`.
 3. When the follow-up makes earlier text wrong, add a dated note at the top
@@ -161,9 +163,9 @@ What was decided or done, and why. Refs: PR #x.
   pull requests as `#123` and to upstream idb pull requests as `facebook/idb#123`.
 - Link sibling entries with relative links. When code is shaped by a
   non-obvious decision, point to the record from the code comment, for example
-  `/// Work record: docs/ai/006-resizable-app-session/000-investigation.md`.
+  `/// Work record: docs/ai/009-resizable-app-session/000-investigation.md`.
 - A file without a number in an entry folder is a living document (a guide, a
-  runbook, a contract), for example `005-linux-android-build/linux-guide.md`.
+  runbook, a contract), for example `008-linux-android-build/linux-guide.md`.
   Update it in place when the behavior changes, and link to it instead of
   copying its content.
 - Current behavior for users and agents goes in `README.md`, `AGENTS.md` and
