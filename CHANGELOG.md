@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Physical iOS `ui` and `tap` retry a null accessibility root for a short window after launch. A development-signed app can answer `deviceFetchSpecialElement: 0` with null on the first read and with a normal tree a moment later, and that transient null was reported as a locked device or a missing `get-task-allow`. The same session now reads again immediately and up to four more times, 500 ms apart, inside a two-second budget from the first attempt; a root that arrives is used at once. A root that stays null still fails with the original unlock and `get-task-allow=true` guidance. A payload that is present but has no element token, a transport error, and cancellation end the read without another attempt. A slow reply is left to finish — the budget only decides whether another read is started. (#110)
+
 ## [0.15.0] - 2026-10-14
 
 ### Added

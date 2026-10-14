@@ -46,6 +46,16 @@ public enum AXAuditError: Error, LocalizedError, CustomStringConvertible {
 /// development-signed (`get-task-allow=true`). Element geometry is unavailable
 /// on this channel, so there is intentionally no frame accessor.
 public struct AXAuditClient: Sendable {
+    /// Extra reads after the immediate one. A launch race that is still null
+    /// on the fifth read is the standing failure, not a longer outage.
+    private static let transientRootRetries = 4
+    /// Pause between null roots. Clamped to whatever the budget has left so
+    /// the last wait cannot run past the deadline.
+    private static let transientRootDelay: Duration = .milliseconds(500)
+    /// Measured from the first attempt. Limits retry scheduling only — a
+    /// slow `deviceFetchSpecialElement:` is never abandoned or cancelled.
+    private static let transientRootBudget: Duration = .seconds(2)
+
     private let transport: any DTXInvoking
 
     public init(transport: any DTXInvoking) {
@@ -82,10 +92,42 @@ public struct AXAuditClient: Sendable {
         try await transport.invoke("deviceApiVersion").intValue
     }
 
+    /// Foreground root (`deviceFetchSpecialElement: 0`).
+    ///
+    /// Right after launch a development-signed app can answer null and then,
+    /// on this same connection, answer normally. A null reply is retried
+    /// immediately and up to four more times, waiting 500 ms or the time left
+    /// in a two-second budget measured from the first attempt, whichever is
+    /// shorter. The attempt that was scheduled to land on the deadline still
+    /// runs. A reply that itself arrives after the budget is spent does not
+    /// start another read, and the in-flight read is not timed out. A present
+    /// payload with no element token, a transport error, or cancellation
+    /// returns immediately.
     public func rootElement() async throws -> AXAuditElement {
-        let reply = try await transport.invoke("deviceFetchSpecialElement:", .int(0))
-        guard let element = AXAuditElement(payload: reply) else { throw AXAuditError.noRootElement }
-        return element
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: Self.transientRootBudget)
+        var scheduledRetries = 0
+
+        while true {
+            try Task.checkCancellation()
+            let reply = try await transport.invoke("deviceFetchSpecialElement:", .int(0))
+            try Task.checkCancellation()
+
+            if let element = AXAuditElement(payload: reply) {
+                return element
+            }
+            // Only a null root is the launch race. Anything else that fails to
+            // decode is the standing no-root failure.
+            guard reply.unwrapped == .null else { throw AXAuditError.noRootElement }
+            if scheduledRetries >= Self.transientRootRetries { throw AXAuditError.noRootElement }
+
+            let remaining = deadline - clock.now
+            // A slow reply can consume the whole budget. Do not start the
+            // next read once the deadline has already passed.
+            if remaining <= .zero { throw AXAuditError.noRootElement }
+            scheduledRetries += 1
+            try await clock.sleep(for: min(Self.transientRootDelay, remaining), tolerance: .zero)
+        }
     }
 
     public func value(of attribute: AXAuditAttribute, for element: AXAuditElement) async throws -> AXAuditValue {

@@ -32,6 +32,14 @@ struct IOSDeviceBackendTests {
         }
     }
 
+    @Test("a null root is retried until the element arrives")
+    func nullRootIsRetriedUntilPresent() async throws {
+        let root = AXAuditElement(token: Data(repeating: 0xA1, count: 20))
+        let element = try await AXAuditClient(transport: TransientNullRootTransport(root: root)).rootElement()
+
+        #expect(element == root)
+    }
+
     @Test("command help marks physical-device support as experimental and development-only")
     func commandHelpStatesSupportBoundary() async throws {
         let result = try await TestHelpers.runSimUseCommand("ios-device --help")
@@ -671,5 +679,26 @@ private actor HierarchyTransport: DTXInvoking {
         default:
             return .null
         }
+    }
+}
+
+/// First `deviceFetchSpecialElement:` is null; the next one is the element.
+private actor TransientNullRootTransport: DTXInvoking {
+    private let root: AXAuditElement
+    private var servedNull = false
+
+    init(root: AXAuditElement) {
+        self.root = root
+    }
+
+    func invoke(
+        _ selector: String,
+        arguments: [AXAuditValue],
+        expectsReply: Bool
+    ) async throws -> AXAuditValue {
+        guard selector == "deviceFetchSpecialElement:" else { return .null }
+        if servedNull { return root.encoded }
+        servedNull = true
+        return .null
     }
 }
