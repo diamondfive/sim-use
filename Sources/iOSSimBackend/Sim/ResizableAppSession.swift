@@ -22,7 +22,7 @@ import SimUseCore
 /// This file is the stop-gap: *detect* the session via CoreDevice and make
 /// every affected verb honest about it. Real routing to the Resizable
 /// display needs upstream idb's multi-display plumbing — see
-/// docs/ai/xxxx-resizable-app-session/README.md for the evidence, the
+/// docs/ai/009-resizable-app-session/000-investigation.md for the evidence, the
 /// `touchscreen(0x104)` digitizer finding and the migration notes.
 public struct ResizableAppSession: Equatable, Sendable {
     /// CoreDevice display UUID. **Changes on every boot** — never persist it.

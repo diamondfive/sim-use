@@ -150,7 +150,7 @@ reverted (`git -C idb_checkout checkout -- .` + `build.sh frameworks && install
 - Migration cost is large: the FB* prefix is gone (`SimulatorHID`,
   `SimulatorDigitizerHIDTransport`, `AXBridgeUIAutomation`), and AX moved to a
   guest-side bridge executable. This compounds the idb-bump project already
-  described in `docs/ai/xxxx-xcode27-support/README.md`.
+  described in `docs/ai/006-xcode27-support/000-investigation.md`.
 
 ## Other tools
 

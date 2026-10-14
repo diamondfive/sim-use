@@ -3,7 +3,7 @@
 #
 # Build and install the Linux (Android-only) sim-use CLI.
 #
-# Builds the Android-only Linux target graph (see docs/linux.md). The
+# Builds the Android-only Linux target graph (see docs/ai/008-linux-android-build/linux-guide.md). The
 # install is two pieces that must travel together:
 #
 #   sim-use                            the executable

@@ -193,3 +193,7 @@ still emit the raw framebuffer orientation.
   and HID traffic now ride separate transforms; see the update note at the
   top. The calibrator's measure-don't-assume design is what kept portrait
   taps and probes self-consistent in the interim.
+
+## Amendments
+
+- Updated 2026-10-14: gesture presets calibrate, and explicit coordinates gain the opt-in `--coordinate-space ui` on `swipe`, `touch` and `tap` (#73, #74, #144) — see [001-gesture-presets-and-coordinate-space.md](001-gesture-presets-and-coordinate-space.md)

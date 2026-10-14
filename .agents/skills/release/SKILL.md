@@ -24,7 +24,7 @@ Run these checks. Abort with a clear error if any fails.
    ```
    If it exists, verify it's clean and pull latest.
 7. Android bridge toolchain: `scripts/build-bridge.sh --check` succeeds.
-7.5. **E2E confidence suites are green** (see `docs/ai/xxxx-e2e-confidence-suite/`):
+7.5. **E2E confidence suites are green** (see `docs/ai/003-e2e-confidence-suite/`):
    ```bash
    make e2e            # iOS + Android scripted E2E vs Playground, in sequence
    ```
