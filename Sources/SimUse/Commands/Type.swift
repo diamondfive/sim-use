@@ -66,9 +66,9 @@ struct Type: SimUseExecutableCommand {
 
     var simulatorUDIDForDaemon: String? { device.resolved }
 
-    // The daemon runs with stdin=/dev/null. Bypass daemon when reading
-    // from stdin so --stdin actually sees the caller's terminal input.
-    var daemonBypass: Bool { useStdin }
+    func daemonArguments(from arguments: [String]) throws -> [String] {
+        try IOSSimTypeCommand.daemonArguments(from: arguments, useStdin: useStdin, inputFile: inputFile)
+    }
 
     func format(_ result: ExecutionResult) -> CommandOutput { .empty }
 

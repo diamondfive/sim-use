@@ -87,7 +87,28 @@ public struct IOSSimPasteCommand: SimUseExecutableCommand {
 
     public var simulatorUDIDForDaemon: String? { device.resolved }
 
-    public var daemonBypass: Bool { useStdin }
+    public func daemonArguments(from arguments: [String]) throws -> [String] {
+        try Self.daemonArguments(from: arguments, useStdin: useStdin, inputFile: inputFile)
+    }
+
+    /// The daemon runs with stdin on /dev/null and in its own working
+    /// directory, so `--stdin` and a relative `--file` cannot be read
+    /// there. Read the text here and forward it as the positional, so the
+    /// Cmd+V or edit-menu events come from the daemon's long-lived HID
+    /// connection (see `DaemonInlineInput`). Public so the top-level
+    /// forwarder inlines the text the same way.
+    public static func daemonArguments(from arguments: [String], useStdin: Bool, inputFile: String?) throws -> [String] {
+        guard useStdin || inputFile != nil else { return arguments }
+        let text: String
+        do {
+            text = try resolveInputText(text: nil, useStdin: useStdin, inputFile: inputFile, logger: nil)
+        } catch let error as ValidationError {
+            // CLIError so the message survives run()'s catch; a
+            // ValidationError there degrades to the opaque bridge wrapper.
+            throw CLIError(errorDescription: error.message)
+        }
+        return DaemonInlineInput.inliningText(text, into: arguments)
+    }
 
     public func format(_ result: ExecutionResult) -> CommandOutput { .empty }
 

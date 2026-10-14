@@ -182,11 +182,14 @@ public struct DeviceResolver {
     /// (`sim-use daemon stop`) after the client upgrade so the daemon
     /// process picks up the new parser.
     public static func injectingDeviceIfNeeded(_ args: [String], device: String) -> [String] {
-        if args.contains("--device") || args.contains("--udid") { return args }
-        if args.contains(where: { $0.hasPrefix("--device=") || $0.hasPrefix("--udid=") }) {
+        // Tokens after a `--` terminator are positionals (inlined text, for
+        // example), so they neither carry a device nor accept one.
+        let options = args.prefix { $0 != "--" }
+        if options.contains("--device") || options.contains("--udid") { return args }
+        if options.contains(where: { $0.hasPrefix("--device=") || $0.hasPrefix("--udid=") }) {
             return args
         }
-        return args + ["--device", device]
+        return DaemonInlineInput.insertingOptions(["--device", device], into: args)
     }
 
     /// Parses the JSON shape emitted by `simctl list devices booted -j`:

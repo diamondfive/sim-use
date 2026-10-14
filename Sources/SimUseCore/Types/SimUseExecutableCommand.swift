@@ -37,6 +37,14 @@ public protocol SimUseExecutableCommand: AsyncParsableCommand {
     /// does not fit the request-response envelope. Default false.
     var daemonBypass: Bool { get }
 
+    /// The argv tail (everything after `sim-use`) that the daemon parses
+    /// for this command. The daemon runs with stdin on `/dev/null` and in
+    /// its own working directory, so a command that reads the caller's
+    /// stdin or a caller-relative file reads it here and returns arguments
+    /// that carry the input inline (see `DaemonInlineInput`). Called only
+    /// when the command goes to the daemon. Default: `arguments` unchanged.
+    func daemonArguments(from arguments: [String]) throws -> [String]
+
     /// Target simulator UDID, if the command is scoped to one. nil
     /// means "no UDID" (`init`, `list-simulators`) and causes the
     /// default `run()` to stay in-process.
@@ -70,6 +78,7 @@ public protocol SimUseExecutableCommand: AsyncParsableCommand {
 extension SimUseExecutableCommand {
     // Protocol defaults.
     public var daemonBypass: Bool { false }
+    public func daemonArguments(from arguments: [String]) throws -> [String] { arguments }
     public var simulatorUDIDForDaemon: String? { nil }
     public var managesLivenessState: Bool { false }
     public func clientPreflight() async {}
@@ -181,7 +190,7 @@ extension SimUseExecutableCommand {
         // `sim-use ios <verb>`, so the daemon parser must see the
         // entire subcommand path to walk into `IOSSimCommand` first.
         let fullTail = DeviceResolver.injectingDeviceIfNeeded(
-            Array(CommandLine.arguments.dropFirst(1)),
+            try daemonArguments(from: Array(CommandLine.arguments.dropFirst(1))),
             device: udid
         )
         let commandName = fullTail.first ?? resolvedCommandName

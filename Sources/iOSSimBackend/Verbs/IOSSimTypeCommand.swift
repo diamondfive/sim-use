@@ -66,11 +66,25 @@ public struct IOSSimTypeCommand: SimUseExecutableCommand {
 
     public var simulatorUDIDForDaemon: String? { device.resolved }
 
-    // The daemon runs with stdin=/dev/null, so --stdin input would read
-    // zero bytes through the daemon path. Bypass the daemon only when
-    // reading from stdin; positional and --file inputs go through the
-    // daemon as usual.
-    public var daemonBypass: Bool { useStdin }
+    public func daemonArguments(from arguments: [String]) throws -> [String] {
+        try Self.daemonArguments(from: arguments, useStdin: useStdin, inputFile: inputFile)
+    }
+
+    /// The daemon runs with stdin on /dev/null and in its own working
+    /// directory, so `--stdin` and a relative `--file` cannot be read
+    /// there. Read the text here and forward it as the positional.
+    /// Running in-process instead drops every key on the CoreDevice
+    /// (dtuhidd) HID transport; see `DaemonInlineInput`. Public so the
+    /// top-level forwarder inlines the text the same way.
+    public static func daemonArguments(from arguments: [String], useStdin: Bool, inputFile: String?) throws -> [String] {
+        if useStdin {
+            return DaemonInlineInput.inliningText(readFromStdin(), into: arguments)
+        }
+        if let inputFile {
+            return DaemonInlineInput.inliningText(try readFromFile(inputFile), into: arguments)
+        }
+        return arguments
+    }
 
     public func format(_ result: ExecutionResult) -> CommandOutput { .empty }
 

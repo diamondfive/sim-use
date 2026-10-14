@@ -321,6 +321,18 @@ struct DeviceArgInjectionTests {
         #expect(out == ["--udid=EXPLICIT", "@5"])
     }
 
+    @Test("inserts --device before a -- terminator, so it is not read as a positional")
+    func insertsBeforeTerminator() {
+        let out = Resolver.injectingDeviceIfNeeded(["type", "--", "-5 apples"], device: "RESOLVED")
+        #expect(out == ["type", "--device", "RESOLVED", "--", "-5 apples"])
+    }
+
+    @Test("a positional after -- that reads --device does not count as a device argument")
+    func ignoresDeviceTokenAfterTerminator() {
+        let out = Resolver.injectingDeviceIfNeeded(["type", "--", "--device"], device: "RESOLVED")
+        #expect(out == ["type", "--device", "RESOLVED", "--", "--device"])
+    }
+
     @Test("empty argv gets a fresh --device pair")
     func emptyArgs() {
         let out = Resolver.injectingDeviceIfNeeded([], device: "RESOLVED")
