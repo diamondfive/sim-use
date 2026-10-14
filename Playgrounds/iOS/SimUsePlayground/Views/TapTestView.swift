@@ -81,6 +81,10 @@ struct TapTestView: View {
                     .scaleEffect(indicator.scale)
                     .opacity(indicator.opacity)
                     .shadow(color: indicator.color.opacity(0.3), radius: 3, x: 0, y: 2)
+                    // A marker sits on the point it records; without this,
+                    // a second tap at the same point lands on the marker
+                    // instead of the tap area and is not counted.
+                    .allowsHitTesting(false)
                     .accessibilityIdentifier("tap-indicator-\(indicator.id.uuidString)")
                     .accessibilityValue("x:\(Int(indicator.displayX)),y:\(Int(indicator.displayY))")
             }
