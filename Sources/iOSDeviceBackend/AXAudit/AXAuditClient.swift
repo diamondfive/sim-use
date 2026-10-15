@@ -95,17 +95,28 @@ public struct AXAuditClient: Sendable {
     /// Foreground root (`deviceFetchSpecialElement: 0`).
     ///
     /// Right after launch a development-signed app can answer null and then,
-    /// on this same connection, answer normally. A null reply is retried
-    /// immediately and up to four more times, waiting 500 ms or the time left
-    /// in a two-second budget measured from the first attempt, whichever is
-    /// shorter. The attempt that was scheduled to land on the deadline still
-    /// runs. A reply that itself arrives after the budget is spent does not
-    /// start another read, and the in-flight read is not timed out. A present
-    /// payload with no element token, a transport error, or cancellation
-    /// returns immediately.
+    /// on a later read, answer normally. The first read is immediate.
+    /// Subsequent retries wait up to 500 ms each, shortened to the time left
+    /// in a two-second budget measured from the first attempt, and there are
+    /// at most four retries (five reads total). The budget governs retry
+    /// scheduling and is not a hard timeout on the whole operation: a read
+    /// already scheduled still runs if it lands on the deadline, a reply that
+    /// arrives after the budget is spent does not start another read, and the
+    /// in-flight read is not abandoned. A present payload with no element
+    /// token, or a transport error, returns without another read. Cancellation
+    /// during the wait between retries prevents the next read. Cancellation
+    /// during an in-flight DTX read is observed only after that read
+    /// completes, because the existing transport continuation does not handle
+    /// cancellation. Retries reuse the current session without reconnecting.
+    /// Pooled configurations do not guarantee the same underlying connection.
     public func rootElement() async throws -> AXAuditElement {
+        try await rootElement(delay: Self.transientRootDelay, budget: Self.transientRootBudget)
+    }
+
+    /// Test seam. Production calls pass `transientRootDelay` and `transientRootBudget`.
+    func rootElement(delay: Duration, budget: Duration) async throws -> AXAuditElement {
         let clock = ContinuousClock()
-        let deadline = clock.now.advanced(by: Self.transientRootBudget)
+        let deadline = clock.now.advanced(by: budget)
         var scheduledRetries = 0
 
         while true {
@@ -126,7 +137,7 @@ public struct AXAuditClient: Sendable {
             // next read once the deadline has already passed.
             if remaining <= .zero { throw AXAuditError.noRootElement }
             scheduledRetries += 1
-            try await clock.sleep(for: min(Self.transientRootDelay, remaining), tolerance: .zero)
+            try await clock.sleep(for: min(delay, remaining), tolerance: .zero)
         }
     }
 
