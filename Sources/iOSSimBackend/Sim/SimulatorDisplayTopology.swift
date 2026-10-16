@@ -346,8 +346,21 @@ public actor SimulatorDisplayTopologyMonitor {
         if case .unavailable(let reason) = state, reason.contains("subcommand") {
             toolUnavailableReason = reason
         }
-        cache[udid] = CacheEntry(state: state, checkedAt: now, rootSize: rootSize ?? cache[udid]?.rootSize)
+        cache[udid] = CacheEntry(state: state, checkedAt: now, rootSize: rootSize ?? Self.carriedRootSize(from: cache[udid], to: state))
         return state
+    }
+
+    /// The root size a probe without one keeps from the previous entry: only
+    /// while the active display and its rotation are unchanged, since the
+    /// root size describes that display. A probe that sees another active
+    /// display drops it, so the next root size re-probes (R157-02).
+    private static func carriedRootSize(from previous: CacheEntry?, to state: SimulatorDisplayTopologyState) -> RootSize? {
+        guard let previous, let rootSize = previous.rootSize,
+              let old = previous.state.topology?.activeIntegrated,
+              let new = state.topology?.activeIntegrated,
+              old.uniqueID == new.uniqueID, old.rotation == new.rotation
+        else { return nil }
+        return rootSize
     }
 
     /// Drops the cached answer for `udid` so the next query re-probes.

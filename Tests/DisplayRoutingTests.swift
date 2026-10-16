@@ -646,6 +646,53 @@ struct TopologyRootEvidenceTests {
         #expect(await topologies.probeCount == 3)
     }
 
+    @Test("a rootless probe that sees another active display drops the old root association (R157-02 follow-up)")
+    func rootlessProbeDropsStaleRoot() async throws {
+        let device = Fixtures(.available(try topology("duo-open")))
+        let frozen = Date(timeIntervalSince1970: 0)
+        let topologies = SimulatorDisplayTopologyMonitor(ttl: 60, clock: { frozen }, probe: { _ in device.get() }, environment: [:])
+        let sessions = sessionMonitor(.inactive)
+        let inner = RootSize(width: 669, height: 951)
+
+        // Inner display active; `ui` warms the cache with the inner root.
+        _ = await RoutingDisplayResolver.current(udid: "U", rootSize: inner, sessionMonitor: sessions, topologyMonitor: topologies)
+        #expect(await topologies.probeCount == 1)
+
+        // Folded out of band; a posture report probes without a root.
+        device.set(.available(try topology("duo-folded")))
+        _ = await topologies.state(for: "U", fresh: true)
+        #expect(await topologies.probeCount == 2)
+
+        // Unfolded again; the next `ui` brings the inner root back. The
+        // cached cover answer must not ride on the old inner root.
+        device.set(.available(try topology("duo-open")))
+        let routing = await RoutingDisplayResolver.current(udid: "U", rootSize: inner, sessionMonitor: sessions, topologyMonitor: topologies)
+        #expect(await topologies.probeCount == 3)
+        guard case .secondary(let display) = routing else {
+            Issue.record("expected the inner display, got \(routing)")
+            return
+        }
+        #expect(display.name == "LCD-1")
+        #expect(routing.interfaceOrientation == .landscapeLeft)
+        await #expect(throws: SecondaryDisplayInputError.self) {
+            try await RoutingDisplayGuard.assertTouchInputReachesApp(
+                udid: "U", verb: "tap", logger: quietLogger, sessionMonitor: sessions, topologyMonitor: topologies
+            )
+        }
+    }
+
+    @Test("a rootless probe that sees the same active display keeps the root association")
+    func rootlessProbeKeepsValidRoot() async throws {
+        let frozen = Date(timeIntervalSince1970: 0)
+        let state = SimulatorDisplayTopologyState.available(try topology("duo-open"))
+        let topologies = SimulatorDisplayTopologyMonitor(ttl: 60, clock: { frozen }, probe: { _ in state }, environment: [:])
+        let inner = RootSize(width: 669, height: 951)
+        _ = await topologies.state(for: "U", rootSize: inner)
+        _ = await topologies.state(for: "U", fresh: true)
+        _ = await topologies.state(for: "U", rootSize: inner)
+        #expect(await topologies.probeCount == 2)
+    }
+
     @Test("a single-display answer stays permanent whatever the root size")
     func singleDisplayIgnoresRoot() async throws {
         let topologies = SimulatorDisplayTopologyMonitor(probe: { _ in .available(try! topology("iphone17")) }, environment: [:])
