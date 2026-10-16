@@ -32,6 +32,115 @@ struct IOSDeviceBackendTests {
         }
     }
 
+    @Test("a null root is retried until the element arrives")
+    func nullRootIsRetriedUntilPresent() async throws {
+        let root = AXAuditElement(token: Data(repeating: 0xA1, count: 20))
+        let element = try await AXAuditClient(transport: TransientNullRootTransport(root: root)).rootElement()
+
+        #expect(element == root)
+    }
+
+    @Test("persistent null roots exhaust the five-read limit")
+    func persistentNullRootExhaustsReadLimit() async {
+        // No pause and a budget these instant reads cannot reach, so the
+        // five-read cap stops the loop, not the scheduling budget.
+        let transport = ScriptedRootTransport(Array(repeating: .value(.null), count: 5))
+        await expectNoRoot(reads: 5, from: transport) {
+            try await AXAuditClient(transport: transport).rootElement(delay: .zero, budget: .seconds(30))
+        }
+    }
+
+    @Test("a malformed non-null root is not retried")
+    func malformedRootIsNotRetried() async {
+        let malformed = AXAuditValue.object(tag: "AXAuditElement_v1", fields: [:])
+        let transport = ScriptedRootTransport([.value(malformed)])
+        await expectNoRoot(reads: 1, from: transport) {
+            try await AXAuditClient(transport: transport).rootElement()
+        }
+    }
+
+    @Test("a transport error reading the root is not retried")
+    func rootTransportErrorIsNotRetried() async {
+        let transport = ScriptedRootTransport([.failure])
+        do {
+            _ = try await AXAuditClient(transport: transport).rootElement()
+            Issue.record("expected the transport error")
+        } catch ScriptedRootTransport.Failure.transport {
+        } catch {
+            Issue.record("expected ScriptedRootTransport.Failure.transport, got \(error)")
+        }
+        #expect(await transport.reads == 1)
+    }
+
+    @Test("a slow null root exhausts the scheduling budget before five reads")
+    func slowNullRootExhaustsSchedulingBudget() async {
+        let transport = ScriptedRootTransport([
+            .slowNull, .value(.null), .value(.null), .value(.null), .value(.null),
+        ])
+        await expectNoRoot(reads: 1, from: transport) {
+            try await AXAuditClient(transport: transport).rootElement()
+        }
+    }
+
+    @Test("a root that arrives on the fifth read is accepted")
+    func rootOnFifthReadIsAccepted() async throws {
+        let root = AXAuditElement(token: Data(repeating: 0xA5, count: 20))
+        let transport = ScriptedRootTransport([
+            .value(.null), .value(.null), .value(.null), .value(.null), .value(root.encoded),
+        ])
+        // No pause and a budget these instant reads cannot reach, so only the
+        // read limit decides whether the fifth reply is used.
+        let element = try await AXAuditClient(transport: transport).rootElement(delay: .zero, budget: .seconds(30))
+
+        #expect(element == root)
+        #expect(await transport.reads == 5)
+    }
+
+    @Test("cancellation during the root retry wait prevents another read")
+    func cancellationDuringRootRetryWaitPreventsAnotherRead() async {
+        let transport = ScriptedRootTransport(Array(repeating: .value(.null), count: 5))
+        let task = Task {
+            try await AXAuditClient(transport: transport).rootElement()
+        }
+        let started = ContinuousClock.now
+        while await transport.reads < 1 {
+            if ContinuousClock.now - started > .seconds(2) {
+                Issue.record("root read did not start")
+                task.cancel()
+                _ = try? await task.value
+                return
+            }
+            await Task.yield()
+        }
+        // The null is back; the client is in the pause before the next read.
+        try? await Task.sleep(for: .milliseconds(50))
+        task.cancel()
+
+        do {
+            _ = try await task.value
+            Issue.record("expected cancellation to stop the retry")
+        } catch is CancellationError {
+        } catch {
+            Issue.record("expected CancellationError, got \(error)")
+        }
+        #expect(await transport.reads == 1)
+    }
+
+    private func expectNoRoot(
+        reads expectedReads: Int,
+        from transport: ScriptedRootTransport,
+        _ body: () async throws -> AXAuditElement
+    ) async {
+        do {
+            _ = try await body()
+            Issue.record("expected AXAuditError.noRootElement")
+        } catch AXAuditError.noRootElement {
+        } catch {
+            Issue.record("expected AXAuditError.noRootElement, got \(error)")
+        }
+        #expect(await transport.reads == expectedReads)
+    }
+
     @Test("command help marks physical-device support as experimental and development-only")
     func commandHelpStatesSupportBoundary() async throws {
         let result = try await TestHelpers.runSimUseCommand("ios-device --help")
@@ -670,6 +779,82 @@ private actor HierarchyTransport: DTXInvoking {
             }
         default:
             return .null
+        }
+    }
+}
+
+/// First `deviceFetchSpecialElement:` is null; the next one is the element.
+private actor TransientNullRootTransport: DTXInvoking {
+    private let root: AXAuditElement
+    private var servedNull = false
+
+    init(root: AXAuditElement) {
+        self.root = root
+    }
+
+    func invoke(
+        _ selector: String,
+        arguments: [AXAuditValue],
+        expectsReply: Bool
+    ) async throws -> AXAuditValue {
+        guard selector == "deviceFetchSpecialElement:" else { return .null }
+        if servedNull { return root.encoded }
+        servedNull = true
+        return .null
+    }
+}
+
+/// Scripted `deviceFetchSpecialElement:` replies for the root-retry boundaries.
+/// A read past the script fails instead of hanging a retry loop that no longer stops.
+private actor ScriptedRootTransport: DTXInvoking {
+    enum Step: Sendable {
+        case value(AXAuditValue)
+        case failure
+        /// Holds the read open until the production two-second scheduling budget has passed.
+        case slowNull
+    }
+
+    enum Failure: Error {
+        case transport
+        case unexpectedRead
+    }
+
+    private let steps: [Step]
+    private(set) var reads = 0
+
+    init(_ steps: [Step]) {
+        self.steps = steps
+    }
+
+    func invoke(
+        _ selector: String,
+        arguments: [AXAuditValue],
+        expectsReply: Bool
+    ) async throws -> AXAuditValue {
+        guard selector == "deviceFetchSpecialElement:" else { return .null }
+        let index = reads
+        reads += 1
+        guard index < steps.count else { throw Failure.unexpectedRead }
+        switch steps[index] {
+        case let .value(value):
+            return value
+        case .failure:
+            throw Failure.transport
+        case .slowNull:
+            try await Self.waitPastSchedulingBudget()
+            return .null
+        }
+    }
+
+    /// Production measures two seconds from before this read. Waiting this long
+    /// on the same clock lands after that deadline even if a slice wakes early.
+    private static func waitPastSchedulingBudget() async throws {
+        let clock = ContinuousClock()
+        let until = clock.now.advanced(by: .milliseconds(2_100))
+        while clock.now < until {
+            let remaining = until - clock.now
+            if remaining <= .zero { return }
+            try await clock.sleep(for: min(.milliseconds(50), remaining), tolerance: .zero)
         }
     }
 }
