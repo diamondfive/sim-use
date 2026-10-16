@@ -57,7 +57,7 @@ Detailed solutions for common sim-use issues. The symptom index in SKILL.md poin
 **Recipes:**
 1. Check the posture: `sim-use ios fold --device <UDID>` names the active display and its orientation.
 2. Observe freely on the inner display: `ui` reads the app's own tree, sized to the inner display's interface (`951x669` in landscape, `669x951` in portrait); `screenshot` captures the inner display.
-3. Drive with the keyboard: `type`, Cmd+V `paste` and the key verbs reach the app on the inner display. Focus a field before unfolding, since focusing needs a tap.
+3. Drive with the keyboard: `type` and the key verbs reach the app on the inner display. Focus a field before unfolding, since focusing needs a tap.
 4. To tap, fold: `sim-use ios fold closed --device <UDID>` moves the app to the cover display. A fold clears the `ui` snapshot — re-run `ui` before `tap @N`.
 5. To unfold again: `sim-use ios fold open --device <UDID>`. `ios fold half` or a hinge angle reports the display it ended on, which depends on how the hinge got there.
 6. Rotate with `sim-use ios rotate <orientation>` (interface names, as the `ui` header prints them). It also clears the snapshot.
