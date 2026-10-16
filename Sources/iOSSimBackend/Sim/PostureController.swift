@@ -38,7 +38,8 @@ public enum PostureController {
         target: FoldTarget,
         timeout: TimeInterval,
         logger: SimUseLogger,
-        topologyMonitor: SimulatorDisplayTopologyMonitor = .shared
+        topologyMonitor: SimulatorDisplayTopologyMonitor = .shared,
+        sessionMonitor: ResizableAppSessionMonitor = .shared
     ) async throws -> FoldOutcome {
         let topology = try await requireTopology(udid: udid, monitor: topologyMonitor)
         guard topology.isMultiDisplay else {
@@ -59,11 +60,9 @@ public enum PostureController {
             }
             return true
         }
-        await topologyMonitor.invalidate(udid: udid)
-
         let final = settled.topology ?? topology
         let confirmed = settled.met
-        let sessionState = await ResizableAppSessionMonitor.shared.state(for: udid).session
+        let sessionState = await postureChanged(udid: udid, topologyMonitor: topologyMonitor, sessionMonitor: sessionMonitor)
         let outcome = FoldOutcome(
             requested: target.description,
             hingeAngle: target.degrees,
@@ -84,11 +83,10 @@ public enum PostureController {
         target: DisplayOrientation,
         timeout: TimeInterval,
         logger: SimUseLogger,
-        topologyMonitor: SimulatorDisplayTopologyMonitor = .shared
+        topologyMonitor: SimulatorDisplayTopologyMonitor = .shared,
+        sessionMonitor: ResizableAppSessionMonitor = .shared
     ) async throws -> (outcome: RotateOutcome, advisory: CommandAdvisory?) {
-        if case .active(let resizable) = await ResizableAppSessionMonitor.shared.state(for: udid) {
-            throw CLIError(errorDescription: "A resizable app session (Xcode 27 Resize Mode, \(resizable.preferredSizeDescription)) is active on simulator \(udid). Sessions are portrait-only; end the session before rotating.")
-        }
+        try await assertNoResizeSession(udid: udid, sessionMonitor: sessionMonitor)
 
         let before = await topologyMonitor.state(for: udid, fresh: true).topology
         let session = try await HIDInteractor.makeSession(for: udid, logger: logger)
@@ -118,7 +116,7 @@ public enum PostureController {
             try await send(sent, multiDisplay: multiDisplay, session: session, logger: logger)
             after = await waitForRotation(udid: udid, wanted: wanted, timeout: timeout, monitor: topologyMonitor)
         }
-        await topologyMonitor.invalidate(udid: udid)
+        _ = await postureChanged(udid: udid, topologyMonitor: topologyMonitor, sessionMonitor: sessionMonitor)
 
         guard let after else {
             // No CoreDevice read-back (older devicectl): the change was
@@ -163,6 +161,31 @@ public enum PostureController {
             try await VendorDefinedHID.send(.orientation(orientation.virtualMachineValue), to: session.simulator, logger: logger)
         } else {
             try await HIDInteractor.performHIDEvent(.deviceOrientation(orientation.purpleOrientation), in: session, logger: logger)
+        }
+    }
+
+    // MARK: Cached state
+
+    /// After a fold or a rotation: the routing state the daemon caches is
+    /// stale (unfolding ends a Resize Mode session, R157-01). Returns the
+    /// session state now.
+    static func postureChanged(
+        udid: String,
+        topologyMonitor: SimulatorDisplayTopologyMonitor,
+        sessionMonitor: ResizableAppSessionMonitor
+    ) async -> ResizableAppSession? {
+        await topologyMonitor.invalidate(udid: udid)
+        await sessionMonitor.invalidate(udid: udid)
+        return await sessionMonitor.state(for: udid).session
+    }
+
+    /// Resize Mode sessions are portrait-only. Checked against CoreDevice,
+    /// not the cache: a fold or another tool may have ended the session
+    /// inside the cache window.
+    static func assertNoResizeSession(udid: String, sessionMonitor: ResizableAppSessionMonitor) async throws {
+        await sessionMonitor.invalidate(udid: udid)
+        if case .active(let resizable) = await sessionMonitor.state(for: udid) {
+            throw CLIError(errorDescription: "A resizable app session (Xcode 27 Resize Mode, \(resizable.preferredSizeDescription)) is active on simulator \(udid). Sessions are portrait-only; end the session before rotating.")
         }
     }
 

@@ -171,6 +171,51 @@ struct FoldTests {
         }
     }
 
+    @Test("unfolding ends a Resize Mode session, and the next commands see it at once (R157-01)")
+    func unfoldEndsResizeSession() async throws {
+        guard let udid = try await Self.duoUDID() else { return }
+        let simUse = try TestHelpers.getSimUsePath()
+        try await Self.preservingPosture(udid: udid) {
+            _ = try await Self.fold("closed", udid: udid)
+            _ = try await TestHelpers.runSimUseCommand("ios rotate portrait", simulatorUDID: udid)
+            try await TestHelpers.launchPlaygroundApp(to: "tap-test")
+
+            // A Resize Mode session lives as long as this process.
+            let session = Process()
+            session.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
+            session.arguments = ["devicectl", "device", "appResize", "start", "--device", udid, "--preferred-size", "560x874"]
+            session.standardOutput = FileHandle.nullDevice
+            session.standardError = FileHandle.nullDevice
+            try session.run()
+            defer { if session.isRunning { session.terminate() } }
+
+            // Warm the daemon's session cache with an active answer.
+            var sawSession = false
+            for _ in 0..<20 {
+                let (output, _) = try await CommandRunner.run("\(simUse) ui --json --no-raw --udid \(udid) 2>/dev/null", allowFailure: true)
+                if ((try? Self.json(output))?["advisory"] as? [String: Any])?["kind"] as? String == "resizable_app_session" {
+                    sawSession = true
+                    break
+                }
+                try await Task.sleep(nanoseconds: 500_000_000)
+            }
+            guard sawSession else {
+                Issue.record("Resize Mode session never became active; cannot check R157-01")
+                return
+            }
+
+            let open = try await Self.fold("open", udid: udid)
+            #expect((open["posture"] as? [String: Any])?["resizableSession"] == nil, "fold must not report the ended session: \(open)")
+
+            let (output, _) = try await CommandRunner.run("\(simUse) ui --json --no-raw --udid \(udid) 2>/dev/null")
+            let display = (try Self.json(output)["data"] as? [String: Any])?["display"] as? [String: Any]
+            #expect(display?["kind"] as? String == "integrated", "the inner display hosts the app now: \(String(describing: display))")
+
+            let rotate = try await TestHelpers.runSimUseCommandAllowFailure("ios rotate portrait", simulatorUDID: udid)
+            #expect(rotate.exitCode == 0, "rotation must not be refused by a stale session: \(rotate.output)")
+        }
+    }
+
     @Test("a fold clears the describe-ui snapshot")
     func foldClearsSnapshot() async throws {
         guard let udid = try await Self.duoUDID() else { return }

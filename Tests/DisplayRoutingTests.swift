@@ -541,3 +541,44 @@ struct OutlineCacheInvalidateTests {
         #expect(throws: OutlineCache.ReadError.self) { try OutlineCache.read(udid: "U", home: home) }
     }
 }
+
+// MARK: - Cached state after a posture change (R157-01)
+
+@Suite("PostureController — cached routing state after a posture change")
+struct PostureCacheRefreshTests {
+    /// Answers `first` on the first probe and `.inactive` after it: a
+    /// session that a fold ended.
+    final class EndingSession: @unchecked Sendable {
+        private let lock = NSLock()
+        private var calls = 0
+        let first: ResizableAppSessionState
+        init(first: ResizableAppSessionState) { self.first = first }
+        func probe() -> ResizableAppSessionState {
+            lock.lock(); defer { lock.unlock() }
+            calls += 1
+            return calls == 1 ? first : .inactive
+        }
+    }
+
+    @Test("a fold re-reads the Resize Mode session instead of reporting the cached one")
+    func foldRefreshesSession() async throws {
+        let ending = EndingSession(first: .active(session))
+        let sessions = ResizableAppSessionMonitor(probe: { _ in ending.probe() }, environment: [:])
+        let topologies = topologyMonitor(.available(try topology("duo-open")))
+        #expect(await sessions.state(for: "U").session == session) // warm cache
+        let now = await PostureController.postureChanged(udid: "U", topologyMonitor: topologies, sessionMonitor: sessions)
+        #expect(now == nil)
+        guard case .secondary = await RoutingDisplayResolver.current(udid: "U", sessionMonitor: sessions, topologyMonitor: topologies) else {
+            Issue.record("expected the inner display after the session ended")
+            return
+        }
+    }
+
+    @Test("rotate checks CoreDevice for a session, not a cached answer")
+    func rotateRechecksSession() async throws {
+        let ending = EndingSession(first: .active(session))
+        let sessions = ResizableAppSessionMonitor(probe: { _ in ending.probe() }, environment: [:])
+        #expect(await sessions.state(for: "U").session == session) // warm cache
+        try await PostureController.assertNoResizeSession(udid: "U", sessionMonitor: sessions)
+    }
+}
