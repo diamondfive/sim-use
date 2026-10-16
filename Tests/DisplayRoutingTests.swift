@@ -582,3 +582,76 @@ struct PostureCacheRefreshTests {
         try await PostureController.assertNoResizeSession(udid: "U", sessionMonitor: sessions)
     }
 }
+
+// MARK: - AX root evidence refreshes the topology (R157-02)
+
+@Suite("SimulatorDisplayTopologyMonitor — AX root size refreshes a multi-display answer")
+struct TopologyRootEvidenceTests {
+    final class Fixtures: @unchecked Sendable {
+        private let lock = NSLock()
+        private var current: SimulatorDisplayTopologyState
+        init(_ state: SimulatorDisplayTopologyState) { current = state }
+        func set(_ state: SimulatorDisplayTopologyState) { lock.lock(); current = state; lock.unlock() }
+        func get() -> SimulatorDisplayTopologyState { lock.lock(); defer { lock.unlock() }; return current }
+    }
+
+    private typealias RootSize = SimulatorDisplayTopologyMonitor.RootSize
+
+    @Test("an unfold seen in a new AX root re-probes inside the TTL and routes to the inner display")
+    func newRootReprobes() async throws {
+        let device = Fixtures(.available(try topology("duo-folded")))
+        let frozen = Date(timeIntervalSince1970: 0)
+        let topologies = SimulatorDisplayTopologyMonitor(ttl: 60, clock: { frozen }, probe: { _ in device.get() }, environment: [:])
+        let sessions = sessionMonitor(.inactive)
+
+        // Folded: the cover's root warms the cache.
+        let folded = await RoutingDisplayResolver.current(
+            udid: "U", rootSize: RootSize(width: 466, height: 678), sessionMonitor: sessions, topologyMonitor: topologies
+        )
+        #expect(folded == .main)
+        #expect(await topologies.probeCount == 1)
+
+        // Unfolded out of band; the next fetch sees the inner root.
+        device.set(.available(try topology("duo-open")))
+        let open = await RoutingDisplayResolver.current(
+            udid: "U", rootSize: RootSize(width: 669, height: 951), sessionMonitor: sessions, topologyMonitor: topologies
+        )
+        guard case .secondary(let display) = open else {
+            Issue.record("expected the inner display, got \(open)")
+            return
+        }
+        #expect(display.name == "LCD-1")
+        #expect(open.interfaceOrientation == .landscapeLeft)
+        #expect(await topologies.probeCount == 2)
+
+        // A touch now gets the secondary-display refusal.
+        await #expect(throws: SecondaryDisplayInputError.self) {
+            try await RoutingDisplayGuard.assertTouchInputReachesApp(
+                udid: "U", verb: "tap", logger: quietLogger, sessionMonitor: sessions, topologyMonitor: topologies
+            )
+        }
+
+        // The same root again rides the cache.
+        _ = await RoutingDisplayResolver.current(
+            udid: "U", rootSize: RootSize(width: 669, height: 951), sessionMonitor: sessions, topologyMonitor: topologies
+        )
+        #expect(await topologies.probeCount == 2)
+
+        // Folding back changes the root again (inner → cover) and re-probes.
+        device.set(.available(try topology("duo-folded")))
+        let back = await RoutingDisplayResolver.current(
+            udid: "U", rootSize: RootSize(width: 466, height: 678), sessionMonitor: sessions, topologyMonitor: topologies
+        )
+        #expect(back == .main)
+        #expect(await topologies.probeCount == 3)
+    }
+
+    @Test("a single-display answer stays permanent whatever the root size")
+    func singleDisplayIgnoresRoot() async throws {
+        let topologies = SimulatorDisplayTopologyMonitor(probe: { _ in .available(try! topology("iphone17")) }, environment: [:])
+        _ = await topologies.state(for: "U", rootSize: RootSize(width: 402, height: 874))
+        _ = await topologies.state(for: "U", rootSize: RootSize(width: 560, height: 874))
+        _ = await topologies.state(for: "U", rootSize: RootSize(width: 874, height: 402))
+        #expect(await topologies.probeCount == 1)
+    }
+}

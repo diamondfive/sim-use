@@ -139,11 +139,12 @@ public enum RoutingDisplayResolver {
     public static func current(
         udid: String,
         evidence: ResizableAppSessionMonitor.SceneEvidence? = nil,
+        rootSize: SimulatorDisplayTopologyMonitor.RootSize? = nil,
         sessionMonitor: ResizableAppSessionMonitor = .shared,
         topologyMonitor: SimulatorDisplayTopologyMonitor = .shared
     ) async -> RoutingDisplay {
         let session = await sessionMonitor.state(for: udid, evidence: evidence)
-        let topology = await topologyMonitor.state(for: udid)
+        let topology = await topologyMonitor.state(for: udid, rootSize: rootSize)
         return resolve(session: session, topology: topology)
     }
 }

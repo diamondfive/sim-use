@@ -275,9 +275,22 @@ public actor SimulatorDisplayTopologyMonitor {
     public static let defaultTTL: TimeInterval = 2
     public static let disableEnvironmentKey = "SIM_USE_DISPLAY_TOPOLOGY_CHECK"
 
+    /// The size of an accessibility root, compared by value.
+    public struct RootSize: Equatable, Sendable {
+        public let width: Double
+        public let height: Double
+
+        public init(width: Double, height: Double) {
+            self.width = width
+            self.height = height
+        }
+    }
+
     private struct CacheEntry {
         let state: SimulatorDisplayTopologyState
         let checkedAt: Date
+        /// The AX root size the probe was made with, nil when none was offered.
+        let rootSize: RootSize?
     }
 
     private let ttl: TimeInterval
@@ -300,7 +313,14 @@ public actor SimulatorDisplayTopologyMonitor {
         self.environment = environment
     }
 
-    public func state(for udid: String, fresh: Bool = false) -> SimulatorDisplayTopologyState {
+    /// `rootSize` is the size of the AX root a caller just fetched. On a
+    /// multi-display device a root size that differs from the one the
+    /// cached answer was probed with bypasses that answer: the app moved to
+    /// another display (a fold from Device Hub or another process) or its
+    /// scene changed shape, inside the TTL (R157-02). The same root size
+    /// seen again does not re-probe, and a single-display answer stays
+    /// permanent.
+    public func state(for udid: String, fresh: Bool = false, rootSize: RootSize? = nil) -> SimulatorDisplayTopologyState {
         if let raw = environment[Self.disableEnvironmentKey]?.lowercased(),
            ["0", "false", "no", "off"].contains(raw)
         {
@@ -315,7 +335,8 @@ public actor SimulatorDisplayTopologyMonitor {
             if let topology = entry.state.topology, !topology.isMultiDisplay {
                 return entry.state
             }
-            if now.timeIntervalSince(entry.checkedAt) < ttl {
+            let rootChanged = rootSize != nil && rootSize != entry.rootSize
+            if now.timeIntervalSince(entry.checkedAt) < ttl, !rootChanged {
                 return entry.state
             }
         }
@@ -325,7 +346,7 @@ public actor SimulatorDisplayTopologyMonitor {
         if case .unavailable(let reason) = state, reason.contains("subcommand") {
             toolUnavailableReason = reason
         }
-        cache[udid] = CacheEntry(state: state, checkedAt: now)
+        cache[udid] = CacheEntry(state: state, checkedAt: now, rootSize: rootSize ?? cache[udid]?.rootSize)
         return state
     }
 

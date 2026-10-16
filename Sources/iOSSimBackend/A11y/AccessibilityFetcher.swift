@@ -164,7 +164,12 @@ public struct AccessibilityFetcher {
         // hit-test stays on the main display. Work record:
         // docs/ai/010-display-routing/000-plan.md.
         let sceneEvidence = Self.resizedSceneEvidence(info: info, native: native)
-        let routing = await RoutingDisplayResolver.current(udid: simulatorUDID, evidence: sceneEvidence)
+        let rootFrame = rawDisplayFrame(in: rawRoots(of: info))
+        let routing = await RoutingDisplayResolver.current(
+            udid: simulatorUDID,
+            evidence: sceneEvidence,
+            rootSize: rootFrame.map { SimulatorDisplayTopologyMonitor.RootSize(width: Double($0.width), height: Double($0.height)) }
+        )
         let resizableSession: ResizableAppSession? = {
             if case .resizable(let session, _) = routing { return session }
             return nil
