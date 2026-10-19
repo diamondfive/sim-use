@@ -97,6 +97,29 @@ installed in the simulator. The one-off probe in E7 was for evidence only.
 | E32 | LINE `26.18.0` (iOS 27.0 SDK) on the Duo | Welcome → login → back in all four inner orientations; on the cover: login methods → phone number → tap field → `type` → unfold mid-flow (field value kept) → back on the inner display |
 | E33 | Resize Mode after S2 | iPhone 17 / iOS 27.0, 560x874: `Tap Location: (450, 650)` exact, `#BackButton`, `ui --point`, a single pid in the tree. A cached active session outlived the session by up to 5 s; a root at the device's own size now re-checks it |
 
+### Found while building S3 (2026-10-16)
+
+| # | Check | Result |
+| --- | --- | --- |
+| E34 | Cost of UI-space calibration from the tree, iPhone 17 / iOS 27.0, Playground (`SIM_USE_PERF=1`, daemon log) | Sim lookup 5 ms, tree fetch 64–71 ms, routing check 0.1 ms, one probe 3–4 ms: ~75 ms per command, almost all of it the tree fetch |
+| E35 | Same, calibrated from the `ui` snapshot (root frame read, probes, in-place confirmation) | `SIM_USE_PERF=1`: root frame + routing 8 ms, calibration probes 7 ms, confirmation 13 ms — 28–30 ms in all, against ~75 ms for the tree. `tap -x/-y` wall time is about 30–40 ms over `native` (~650 ms, noisy) |
+| E36 | iPhone 13 mini / iOS 26.5 (UI 375x812, panel 360x780), portrait | `tap -x 355 -y 758` (inside the bottom-trailing corner button in the outline): `native` hit nothing, the default hit the button |
+| E37 | Playground `gesture-presets`, alternating pinches | Only the first pinch after a launch is recognized, in either space (`native` too); the E2E relaunches before each pinch |
+| E38 | `ui` with Control Center open (iPhone 17 / iOS 27.0, Duo / iOS 27.1, released 0.15.0 too) | The process dies with SIGBUS on a stack guard page in the AX serializer on a cooperative thread, 37 frames deep. Not related to this work: issue #160 |
+
+### Found while building S4 (2026-10-17)
+
+Playground `chrome-test` (NavigationStack, leading and trailing toolbar items, bottom toolbar, TabView), iPhone Duo / iOS 27.1. Fixtures in `Tests/Fixtures/outline-side-bars/`.
+
+| # | Check | Result |
+| --- | --- | --- |
+| E39 | iOS 27.1 SDK build, cover, portrait (466x678) | Vertical bar x≈384–466: `#BackButton` (no label) (399,179), trailing `+` (404,240), tabs (396,494/544/594). The leading toolbar item `Edit` stays in the title row; the bottom toolbar item `Share` stays bottom centre. Before S4 the bar items were spread over Content and Bottom between the rows |
+| E40 | Same, cover landscape-left / landscape-right | landscape-left: the bar is on the trailing edge, back button (611,29) inside the top band. landscape-right: the bar is on the **leading** edge (x≈0–84), content starts at x=84 |
+| E41 | Same, inner display | Portrait (669x951): horizontal navigation bar and bottom tab bar, status items in the tree. Landscape-left and landscape-right: the bar is on the trailing edge (x≈881) |
+| E42 | Settings (UIKit, system) on the cover, General | Time (400,83), Wi-Fi (409,123) and `#BackButton` (399,179) in the bar; the navigation bar leaves a full-width `Group` (0,24 466x58) behind |
+| E43 | iOS 27.0 SDK build | Horizontal bars on the cover (inset 386x678) and on the inner display (871x669); the tab bar is a declared `Group "Tab Bar"` |
+| E44 | LINE 26.17.0 built with Xcode 27.1 (early-bird branch) on the cover | Fills the 466x678 display (the 27.0 SDK build was a 386x678 inset scene). Welcome and login use custom chrome (`返回` button top left), so no bar; the main tabs need a signed-in account, which this simulator does not have |
+
 ### Resizable display (Resize Mode)
 
 Sessions: Duo folded, Settings, 560x874 and then 375x667 (`appResize set
@@ -203,7 +226,7 @@ takes the screen size from the AX root frame and assigns `Top` / `Content` /
 `Bottom` by `yBandInset = 120`. Two changes:
 
 1. **Screen size:** on a non-main routing display, use the routing geometry `pointSize` (the scene size for a session), not the AX root frame (669x951 vs the real 951x669).
-2. **Side rail:** add `Trailing` (and `Leading` for symmetry) regions. They are **evidence-gated**: they turn on only when an anchor element is outside the top and bottom bands and inside a side strip. Anchors are the `BackButton` identifier (role description `back button`, not localized) and the status-bar cluster. Elements inside the detected strip go to the rail region. Without the evidence the output does not change.
+2. **Side rail:** add `Trailing` and `Leading` regions. They are **evidence-gated** (`Sources/iOSSimBackend/Normalizer/OutlineSideBars.swift`): an anchor (`BackButton` identifier, or a tab role `RadioButton`/`Tab`) in a 120 pt edge strip, at least two elements of its column stacked vertically, and the app's wide content clear of the bar's inner edge. The S4 evidence (E40) showed that the first idea — an anchor outside the top band — fails: in cover landscape-left the back button is in the top band. The bar's entries are listed after the bands. Without the evidence the output does not change.
 
 The iOS host AX gives no stable navigation-bar role. On the cover display the
 navigation bar is `AXGroup` with a localized role description (`导航栏`), so
@@ -252,15 +275,19 @@ Acceptance:
 ### S3 — Explicit coordinates default to UI space
 
 Scope: `--coordinate-space` default flips to `ui` on every iOS verb that takes
-explicit coordinates (`tap`, `long-press`, `swipe`, `touch`, `gesture`,
-`multi-touch`, `batch` steps); `native` stays available. Orientation source:
-devicectl `currentOrientation` first, calibrator as fallback (Xcode without
-the command, devicectl failure).
+explicit coordinates (`tap` / `long-press` `-x/-y/--point`, `swipe`, `touch`,
+`multi-touch`, `gesture` pinch/rotate `--center-x/-y`, and the same verbs as
+`batch` steps); `native` stays available. Orientation source: the same
+calibration that selectors use (hit-test probes, CoreDevice when probes are
+ambiguous; fixed calibration off the main display). `native` means the
+routing display's native portrait points (S2).
 
 Acceptance:
 
 - Rotated iPhone (all four orientations), downscaled device (iPhone 13 mini class) and Duo inner/Resizable: `tap -x/-y` with numbers read from `ui` lands on the element by default; `--coordinate-space native` reproduces the old behavior.
-- `CHANGELOG.md` `### Changed` entry, skill and README text updated, skill floor bumped.
+- `swipe`, `touch` (atomic and split), `multi-touch` and `gesture pinch-*`/`rotate-*` take outline coordinates by default; batch steps match the standalone verbs.
+- `--coordinate-space` given with an alias or a selector is rejected (either value); with a directional `gesture` preset it is rejected.
+- `CHANGELOG.md` `### Changed` entry, skill and README text updated. The skill floor stays 0.16.0 (S1 already set it; S3 ships in the same release).
 - Unit tests for the default and both spaces; batch parity.
 
 ### S4 — Outline layout on multi-display devices
@@ -272,8 +299,8 @@ toolbar, trailing buttons).
 Acceptance:
 
 - Duo cover display: `#BackButton` and the status bar are in `Trailing`; content rows stay in `Content`. Inner display (landscape and portrait): bands match the 951x669 / 669x951 UI. Tab bar position verified on both displays and placed in a sensible region.
-- Golden fixtures for single-display trees (iPhone portrait, landscape, iPad) are unchanged.
-- LINE app (simulator build) on both Duo displays: main tabs, a chat, back navigation driven only through `ui` + `tap @N`.
+- Golden fixtures for single-display trees (iPhone portrait, landscape, iPad) are unchanged. Done: `Tests/Fixtures/outline-side-bars/` pins iPhone 17 (Playground chrome portrait/landscape, Settings) and iPad Pro 13-inch / iOS 26.5 (Playground chrome portrait/landscape, Settings sidebar, Settings › About with its back button) with no side region; with no bar the formatter takes the S3 path unchanged.
+- LINE app (simulator build) on both Duo displays: main tabs, a chat, back navigation driven only through `ui` + `tap @N`. **Not met:** the main tabs need a signed-in account (E44); welcome → login → back was driven on both displays with the 27.0 and the 27.1 SDK builds instead.
 
 ### S5 — Video on the routing display
 
@@ -323,6 +350,13 @@ refuse with a message that names the requirement.
 | `fold` and `rotate` are iOS-only verbs (`sim-use ios …`) | Top-level verbs now | No Android implementation yet. Android emulators can fold and rotate, so the arguments stay portable for a later top-level verb (owner decision, 2026-10-16: Android later, separate issue) |
 | Explicit iOS coordinates default to UI space | Keep `native`; UI only on non-main displays | Owner decision 2026-10-16. Same space as the outline and Android; devicectl orientation removes the calibration-failure risk that kept `native` the default. Breaking for callers that hand-write native coordinates on a rotated or downscaled device: `CHANGELOG` `Changed` |
 | Record and stream the routing display in this stack | Refuse until the idb migration | Owner decision 2026-10-16: complete Duo support |
+| S3: UI-space orientation from the selector calibration, not devicectl first | devicectl `currentOrientation` on every command | Measured on iPhone 17 / iOS 27.0, portrait: `tap -x/-y` 610–660 ms native, 670–745 ms ui (one tree fetch plus probes). One devicectl read alone is ~0.1–0.3 s. CoreDevice stays the fallback when probes are ambiguous (S2) |
+| S3: UI-space calibration from the `ui` snapshot first, used only when probes confirm the snapshot's elements are in place | Tree every time (+~75 ms, E34); snapshot like `tap @N` (no confirmation) | The snapshot path reads no tree, so the routing display comes from the daemon cache: after a Resize Mode session ended, an unconfirmed snapshot calibration sent the first tap to the gone `Resizable` display (`ResizeModeTests.firstExplicitTapFollowsSession` red without the confirmation). Two in-place hits within four probes cost a few ms (E35); any doubt falls back to the tree, which re-checks the routing (R158-03). CoreDevice is not consulted on this path |
+| S3: the snapshot path reads the frontmost app's root frame (`FBAccessibilityElement.frame()`, no tree) and requires the snapshot to fit it (R161-01) | Element confirmation only; tree every time | A resized Resize Mode session (560x1200 → 560x667) kept its top controls, so element probes confirmed the old 1200 pt canvas and a gesture started below the scene. The root size also feeds the routing checks exactly as a tree fetch does |
+| S3: split `touch --down` / `--up` take UI coordinates, each half calibrated | Keep `ui` atomic-only (split form would need `native`) | With `ui` as the default, the old rule would reject every split touch. Each half maps the point through the orientation at its own time, which is where the user sees it |
+| S3: `gesture` pinch/rotate centre and canvas in UI space, every sample mapped | Keep native portrait for multi-touch presets | The calibration is affine, so mapping each interpolated sample keeps lines and arcs; the directional presets already use the UI canvas (#66) |
+| S4: side-bar regions from geometry and anchors, not from device or SDK | Device table ("Duo cover = trailing"); trait/SDK checks; AX roles only | The bar edge depends on the display and the orientation (E40, E41); the host cannot read the app's SDK or traits. Anchors are `BackButton` and tab roles (`RadioButton`/`Tab`) — a tab with a sibling tab beside it outside the strip is a horizontal tab bar and does not count (review S4-001). The vertical evidence is the back button plus one more stacked member of its column reaching below the top band (a regular iPhone stacks its status clock above the back button inside the top band, S4-003), or two stacked tabs; any disjoint pair counts, so a rail wrapper does not hide the stack (S4-002). The app's wide content must stay clear of the bar's inner edge — rows on a regular iPhone cross the leading strip, so its back button never qualifies. Full-width grouping elements (the left-behind navigation bar group, E42) are containers, not crossing content |
+| S4: bar entries listed after the bands, aliases renumbered in print order | Keep reading order (bar items between rows) | An agent reads the bar as one unit; aliases stay monotonic in the text |
 | Posture shown only on a non-main routing display | Always; never | Owner decision 2026-10-16: single-display output stays identical |
 | Device Hub closed: make it work if possible, else refuse with the requirement | Must work | Owner decision 2026-10-16 |
 
@@ -339,8 +373,8 @@ refuse with a message that names the requirement.
 1. **Hub closed / Simulator.app.** A fresh headless `simctl boot` (Device Hub running, but not showing the device) already had `dtuhidd` in its process tree, and `devicectl` worked. Not tested with Device Hub quit. With no dtuhidd, sim-use selects the Indigo transport (`defaultHIDTransport`). Can Indigo route to a non-main display? Not tested.
 2. Resolved by E27: the selected Xcode's devicectl (27.0 or 27.1) reads the Duo.
 3. Resolved by E21 (path-dependent). Not known: the rule behind it (angle delta, speed, or both), and whether a fully dark display (`off` on both) can happen with Always-On disabled.
-4. Tab bar placement on the cover and inner displays. Not observed yet (no tab-bar app in this runtime).
-5. Do traditional iPhones expose status-bar elements in the app AX tree? This decides if the status-bar anchor is safe for gating.
+4. Resolved in S4 (E39–E43): with the iOS 27.1 SDK the tab bar is in the vertical bar on the cover (all orientations) and on the inner display in landscape; horizontal at the bottom on the inner display in portrait and with the iOS 27.0 SDK everywhere.
+5. Answered in S4: iPhone 17 (`设置`) and the Duo inner display in portrait expose the time and Wi-Fi in the app tree; the cover vertical bar does in Settings but not in the SwiftUI Playground. Status items are not anchors; they join the bar's column when present (E42).
 6. E7 is one device and one runtime. E14 is two devices and two scene sizes; the "scene at canvas origin" rule is not proven for all sizes.
 7. A fold once sent the foreground app (Settings) to SpringBoard on the cover display; another fold kept it. Not understood.
 8. Rotation on the Duo **cover** display: E2 was measured only with the inner display active.
@@ -349,5 +383,10 @@ refuse with a message that names the requirement.
 11. Resize Mode on the Duo inner display: refused at `rot90` (E17). Not tested at inner `rot0`.
 12. `gesture rotate-cw` / `rotate-ccw` are not detected by the Playground on the cover, the inner display or a single-display iPhone 17 (pre-existing, display-independent). Not investigated here.
 13. Resolved in review (R158-02): on a multi-display simulator, and off the main display, `describe-ui --point` fetches the tree first and uses the same routing, calibration and scene placement as the full outline. Review R158-05 then removed the single-display fast path too: it answered from a cached routing check, so the first point query after a Resize Mode session started hit SpringBoard. Every point query now fetches the tree first (one more tree fetch on an upright single-display simulator), and `OrientationCalibrator.soleOrientation` is gone.
+
+14. Resolved in review (R161-02): a `batch` `gesture pinch-*`/`rotate-*` step sent one single-finger swipe (pre-existing, found with #66). It now sends the standalone verb's two-finger event (`IOSSimGestureCommand.multiTouchEvent`) on the batch-wide calibration.
+15. S3: `paste --via-menu --target-x/-y` uses the same `hidPoint` mapping as `tap`, but it was not verified live: with Device Hub open the pasteboard write is replaced (#153), and `--via-menu` already fails on iOS 26.5/27.0 with `--target-id` too.
+16. S3: software-keyboard elements have framebuffer-anchored frames in a rotated tree; they are discriminators in both the tree and the snapshot calibration (known issue, see #34 follow-ups).
+17. S3: `tap @N` calibrates from the snapshot without the in-place confirmation that UI-space coordinates now use, so the first alias tap after a Resize Mode session starts or ends may still follow a stale routing cache. Not changed here.
 
 ## Amendments
