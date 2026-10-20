@@ -284,7 +284,7 @@ public struct IOSSimDescribeUICommand: SimUseExecutableCommand {
             // Portrait keeps the legacy header byte-for-byte; only a
             // rotated screen earns the tag.
             orientationTag: orientation.flatMap { $0 == .portrait ? nil : $0.rawValue },
-            displayTag: routing.headerTag,
+            displayTag: fetchResult.displayTag,
             screenSize: screenSize
         )
 

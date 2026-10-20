@@ -130,15 +130,21 @@ put an iOS 27+ simulator into a *resizable app session* (Device Hub's
 resize button, or `xcrun devicectl device appResize start`), which moves
 the frontmost app onto a virtual `Resizable` display at an arbitrary
 size. Xcode 27.1's iPhone Duo has two integrated displays: the cover
-display (primary, active when folded) and the inner display (active when
-unfolded). sim-use reads the displays from `xcrun devicectl device info
+display (primary) and the inner display. sim-use reads the displays from
+`xcrun devicectl device info
 displays` and routes everything to the display that hosts the app: touch
 input (`tap`, `long-press`, `swipe`, `touch`, `gesture`, `multi-touch`,
 `batch`) goes to that display's digitizer, accessibility hit-tests
 (`ui --point`, collapsed-children recovery) run on it, and `screenshot`
-captures it. The `ui` header names it (`App: Settings  951x669
-(landscape-left, display LCD-1)`, `(display Resizable 560x874)`) and
-`--json` carries a `display` object; neither appears on the main display.
+captures it. The `ui` header names the Duo screen (`App: Settings  951x669
+(landscape-left, inner display)`, `(cover display)`) or Resize Mode
+(`display Resizable 560x874`). `ios fold` and `ios rotate` use the same
+inner/cover names. An active inner display does not prove a fully open
+hinge; half-open states can use it too. These aliases require the Duo
+device type and a valid two-panel topology; unknown layouts keep system
+names. `--json` keeps raw display names and ids; its `display` object
+appears only off the main display. Ordinary single-screen headers stay
+unchanged.
 On a display other than the main one the orientation comes from
 CoreDevice instead of hit-test probes. `record-video` and `stream-video`
 (`h264`, `bgra`) capture that display too — the inner panel in its native

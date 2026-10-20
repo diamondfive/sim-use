@@ -24,6 +24,7 @@ extension SimUseExecutableCommand {
             advisory: (result as? CommandAdvisoryProviding)?.commandAdvisory
         )
         let encoder = JSONEncoder()
+        encoder.userInfo[.simUseDaemonResponse] = true
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         return try encoder.encode(envelope)
     }

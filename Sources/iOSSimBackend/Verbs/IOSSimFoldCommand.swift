@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 import ArgumentParser
+import CompanionUtilities
+import FBControlCore
+import FBSimulatorControl
 import Foundation
 import SimUseCore
 
@@ -117,7 +120,11 @@ public struct IOSSimFoldCommand: SimUseExecutableCommand {
         guard let posture, let target = FoldTarget(argument: posture) else {
             let topology = try await PostureController.requireTopology(udid: udid, monitor: .shared)
             let session = await ResizableAppSessionMonitor.shared.state(for: udid).session
-            return ExecutionResult(fold: nil, posture: PostureReport(topology: topology, session: session))
+            let simulatorSet = try? await getSimulatorSet(deviceSetPath: nil, logger: logger, reporter: EmptyEventReporter.shared)
+            let deviceTypeIdentifier = simulatorSet?.allSimulators.first { $0.udid == udid }?.device.deviceTypeIdentifier
+            return ExecutionResult(fold: nil, posture: PostureReport(
+                topology: topology, session: session, deviceTypeIdentifier: deviceTypeIdentifier
+            ))
         }
 
         let outcome = try await PostureController.fold(udid: udid, target: target, timeout: timeout, logger: logger)

@@ -84,7 +84,10 @@ public enum PostureController {
             requested: target.description,
             hingeAngle: target.degrees,
             confirmed: confirmed,
-            posture: PostureReport(topology: final, session: sessionState)
+            posture: PostureReport(
+                topology: final, session: sessionState,
+                deviceTypeIdentifier: session.simulator.device.deviceTypeIdentifier
+            )
         )
         guard confirmed else {
             let expected = expectation == .primaryActive ? "the primary display" : "a non-primary integrated display"
@@ -159,7 +162,10 @@ public enum PostureController {
             deviceOrientation: wanted.rawValue,
             orientation: reached?.rawValue,
             confirmed: reached == target,
-            posture: PostureReport(topology: after, session: nil)
+            posture: PostureReport(
+                topology: after, session: nil,
+                deviceTypeIdentifier: session.simulator.device.deviceTypeIdentifier
+            )
         )
         guard reached == target else {
             return (outcome, CommandAdvisory(
