@@ -83,21 +83,23 @@ struct DescribeUITests {
         let targetedFrame = try #require(targetedElement.frame)
 
         #expect(targetedElement.identifier == "BackButton")
-        #expect(targetedElement.label == "sim-use Playground")
-        #expect(targetedElement.type == "Button")
-        #expect(targetedElement.role == "AXButton")
+        // Duo can expose an unnamed side-bar element instead of a
+        // navigation-bar button. Compare with this device's fetched tree.
+        #expect(targetedElement.label == backButton.label)
+        #expect(targetedElement.type == backButton.type)
+        #expect(targetedElement.role == backButton.role)
         #expect(targetedElement.roleDescription == "back button")
         #expect(targetedElement.enabled == true)
         #expect(targetedElement.contentRequired == false)
         #expect(targetedElement.title == nil)
         #expect(targetedElement.helpText == nil)
         #expect(targetedElement.subrole == nil)
-        #expect(targetedElement.AXFrame == "{{16, 62}, {44, 44}}")
+        #expect(targetedElement.AXFrame == backButton.AXFrame)
         #expect(targetedElement.children?.isEmpty == true)
         #expect(targetedElement.customActions?.isEmpty == true)
-        #expect(targetedFrame.x == 16)
-        #expect(targetedFrame.y == 62)
-        #expect(targetedFrame.width == 44)
-        #expect(targetedFrame.height == 44)
+        #expect(targetedFrame.x == frame.x)
+        #expect(targetedFrame.y == frame.y)
+        #expect(targetedFrame.width == frame.width)
+        #expect(targetedFrame.height == frame.height)
     }
 }
