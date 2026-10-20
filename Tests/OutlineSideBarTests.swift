@@ -77,6 +77,66 @@ struct OutlineSideBarTests {
         #expect(outline.regionKind(id: "com.apple.settings.general.about") == "Content")
     }
 
+    @Test("overflowing content frames do not hide the cover display's tab bar")
+    func contentPaneOverflow() throws {
+        // Captured from a real app on the Duo cover. Labels and process
+        // ids are sanitized; frames and tree ancestry are unchanged.
+        let outline = try render("content-overflow-cover-portrait")
+        #expect(outline.sideKinds == ["Trailing"])
+        for id in ["homeTab", "chatTab", "commerceTab", "newsTab", "miniTab"] {
+            #expect(outline.regionKind(id: id) == "Trailing", "tab \(id)")
+        }
+        for label in ["Gift", "Points", "Games"] {
+            #expect(outline.regionKind(label: label) == "Content", "overflowing item \(label)")
+        }
+        let services = try #require(outline.entries.first { $0.label == "Services" && $0.frame.x == 221 })
+        #expect(services.frame == Outline.Frame(x: 221, y: 200, width: 294, height: 30))
+        #expect(outline.entries.count == 33)
+        #expect(outline.text.contains("[Trailing  x>=396]"))
+        #expect(outline.entries.suffix(7).allSatisfy { $0.region.kind == "Trailing" })
+        #expect(outline.entries.map(\.aliases.at) == Array(1...outline.entries.count))
+    }
+
+    @Test("content-pane bounds survive nested groups on either edge", arguments: [false, true])
+    func nestedContentPane(mirrored: Bool) throws {
+        func x(_ value: Int, _ width: Int) -> Int { mirrored ? 466 - value - width : value }
+        let side = mirrored ? "Leading" : "Trailing"
+        let tabs = (0..<5).map { element("RadioButton", "Tab \($0)", x(396, 44), 394 + 50 * $0, 44, 58) }
+        let overflow = [
+            element("Button", "Services", x(221, 294), 200, 294, 30),
+            element("Button", "Gift", x(337, 62), 230, 62, 98),
+            element("Button", "Points", x(399, 62), 230, 62, 98),
+        ].joined(separator: ",")
+        let nested = element("Group", "", x(213, 62), 193, 62, 135, children: overflow)
+        let pane = element("Group", "", x(0, 382), 0, 382, 678, children: nested)
+        let outline = OutlineFormatter.render(tree: try tree((tabs + [pane]).joined(separator: ","), width: 466, height: 678))
+        #expect(outline.sideKinds == [side])
+        for index in 0..<5 {
+            #expect(outline.regionKind(label: "Tab \(index)") == side)
+        }
+        for label in ["Services", "Gift", "Points"] {
+            #expect(outline.regionKind(label: label) == "Content")
+        }
+        let services = try #require(outline.entries.first { $0.label == "Services" })
+        #expect(services.frame.width == 294)
+        #expect(services.frame.x == x(221, 294))
+    }
+
+    @Test("small groups, inset groups and actionable parents do not imply clipping", arguments: [
+        "short-group", "inset-group", "actionable-parent",
+    ])
+    func nonPaneAncestors(kind: String) throws {
+        let role = kind == "actionable-parent" ? "Button" : "Group"
+        let height = kind == "short-group" ? 120 : 678
+        let x = kind == "inset-group" ? 16 : 0
+        let width = kind == "inset-group" ? 350 : 382
+        let overflow = element("Button", "Services", 221, 200, 294, 30)
+        let parent = element(role, "", x, 0, width, height, children: overflow)
+        let tabs = (0..<5).map { element("RadioButton", "Tab \($0)", 396, 394 + 50 * $0, 44, 58) }
+        let outline = OutlineFormatter.render(tree: try tree((tabs + [parent]).joined(separator: ","), width: 466, height: 678))
+        #expect(outline.sideKinds.isEmpty)
+    }
+
     @Test("a full-width button row still blocks the bar")
     func fullWidthRowBlocks() throws {
         let children = [
@@ -144,9 +204,10 @@ struct OutlineSideBarTests {
         return try JSONDecoder().decode([AccessibilityElement].self, from: Data(json.utf8))
     }
 
-    private func element(_ type: String, _ label: String, _ x: Int, _ y: Int, _ w: Int, _ h: Int, id: String? = nil) -> String {
+    private func element(_ type: String, _ label: String, _ x: Int, _ y: Int, _ w: Int, _ h: Int, id: String? = nil, children: String? = nil) -> String {
         let idPart = id.map { ", \"AXUniqueId\": \"\($0)\"" } ?? ""
-        return #"{"type": "\#(type)", "AXLabel": "\#(label)", "frame": {"x": \#(x), "y": \#(y), "width": \#(w), "height": \#(h)}\#(idPart)}"#
+        let childrenPart = children.map { ", \"children\": [\($0)]" } ?? ""
+        return #"{"type": "\#(type)", "AXLabel": "\#(label)", "frame": {"x": \#(x), "y": \#(y), "width": \#(w), "height": \#(h)}\#(idPart)\#(childrenPart)}"#
     }
 
     @Test("a back button above leading row icons is not a bar: the rows cross it")
