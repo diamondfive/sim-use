@@ -26,7 +26,11 @@ import SimUseCore
 ///    which may start inside the strip (LINE on the cover in
 ///    landscape-right). Content only below the column is no evidence.
 ///
-/// Work record: docs/ai/010-display-routing/000-plan.md (S4).
+/// Side-bar evidence uses the horizontal bounds of full-height content
+/// panes. AX child frames can extend past those panes without being visible
+/// in the bar; printed frames and hit targets remain unchanged.
+///
+/// Work record: docs/ai/010-display-routing/002-side-bar-content-overflow.md.
 enum OutlineSideBars {
     enum Edge: String {
         case leading = "Leading"
@@ -52,6 +56,14 @@ enum OutlineSideBars {
         let frame: Outline.Frame
         let role: String?
         let uniqueId: String?
+        var contentPanes: [Outline.Frame] = []
+
+        var visibleFrame: Outline.Frame? {
+            let left = contentPanes.reduce(frame.x) { max($0, $1.x) }
+            let right = contentPanes.reduce(frame.x + frame.width) { min($0, $1.x + $1.width) }
+            guard right > left else { return nil }
+            return Outline.Frame(x: left, y: frame.y, width: right - left, height: frame.height)
+        }
     }
 
     /// Wider than Apple's 84 pt bar plus its margins; narrow enough that a
@@ -62,7 +74,11 @@ enum OutlineSideBars {
 
     static func detect(_ items: [Item], screen: Outline.Frame) -> [Bar] {
         guard screen.width > maxBarWidth * 2, screen.height > 0 else { return [] }
-        return [Edge.leading, .trailing].compactMap { bar(at: $0, items: items, screen: screen) }
+        let visibleItems = items.compactMap { item -> Item? in
+            guard let frame = item.visibleFrame else { return nil }
+            return Item(frame: frame, role: item.role, uniqueId: item.uniqueId)
+        }
+        return [Edge.leading, .trailing].compactMap { bar(at: $0, items: visibleItems, screen: screen) }
     }
 
     private static func bar(at edge: Edge, items: [Item], screen: Outline.Frame) -> Bar? {
@@ -132,6 +148,23 @@ enum OutlineSideBars {
     /// says nothing about where the content ends; a full-width button or
     /// cell does.
     private static let groupingRoles: Set<String> = ["Group", "GenericElement", "ScrollView"]
+
+    /// AX groups are not clipping views in general. A wide, full-height
+    /// group aligned with a screen edge is evidence of a content pane;
+    /// only its horizontal bounds constrain side-bar evidence.
+    static func contentPane(for element: AccessibilityElement, screen: Outline.Frame) -> Outline.Frame? {
+        guard let role = element.type, groupingRoles.contains(role), let frame = element.frame,
+              screen.width > 0, screen.height > 0 else { return nil }
+        let pane = Outline.Frame(
+            x: Int(frame.x.rounded()), y: Int(frame.y.rounded()),
+            width: Int(frame.width.rounded()), height: Int(frame.height.rounded())
+        )
+        guard pane.width * 2 >= screen.width, pane.width < screen.width,
+              pane.x >= 0, pane.x + pane.width <= screen.width,
+              pane.x == 0 || pane.x + pane.width == screen.width,
+              pane.y <= 0, pane.y + pane.height >= screen.height else { return nil }
+        return pane
+    }
 
     /// A view that spans (nearly) the whole screen — the window, a
     /// full-screen group — or a full-width grouping element.

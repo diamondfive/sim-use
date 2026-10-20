@@ -1,5 +1,9 @@
 # 010 — Display routing (iPhone Duo, Resize Mode) and device rotation: Plan
 
+> Updated 2026-10-20: S4 side-bar evidence now respects full-height content
+> panes when child AX frames overflow. See [002-side-bar-content-overflow.md](002-side-bar-content-overflow.md).
+
+
 > Updated 2026-10-20: Duo display labels in default text use validated
 > inner/cover aliases; raw JSON names stay unchanged. See [003-readable-display-names.md](003-readable-display-names.md).
 
@@ -437,4 +441,5 @@ Result: works (E48–E52). dtuhidd can be started on demand; Indigo cannot route
 
 ## Amendments
 - Updated 2026-10-17: all six slices done; action log in [001-action.md](001-action.md)
+- Updated 2026-10-20: side-bar evidence must respect full-height content panes when child AX frames overflow — see [002-side-bar-content-overflow.md](002-side-bar-content-overflow.md).
 - Updated 2026-10-20: readable Duo display names — see [003-readable-display-names.md](003-readable-display-names.md).

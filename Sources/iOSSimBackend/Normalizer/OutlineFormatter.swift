@@ -116,12 +116,12 @@ public enum OutlineFormatter {
                 // The Application itself is represented by the header
                 // line; only its descendants become outline entries.
                 for child in root.children ?? [] {
-                    walk(element: child, declaredRegion: nil, depth: 1, collected: &collected)
+                    walk(element: child, declaredRegion: nil, depth: 1, screen: screen, contentPanes: [], collected: &collected)
                 }
             } else {
                 // Subtree / --point mode: the root is an actual element
                 // the caller wants to inspect, so include it.
-                walk(element: root, declaredRegion: nil, depth: 0, collected: &collected)
+                walk(element: root, declaredRegion: nil, depth: 0, screen: screen, contentPanes: [], collected: &collected)
             }
         }
 
@@ -167,13 +167,11 @@ public enum OutlineFormatter {
         // A vertical bar of system chrome along one side (iPhone Duo,
         // iOS 27.1 SDK apps) becomes its own region, listed after the
         // bands so aliases stay in print order. Declared regions win.
-        let bars = OutlineSideBars.detect(
-            sorted.map { OutlineSideBars.Item(frame: $0.frame, role: $0.collected.element.type, uniqueId: $0.collected.element.normalizedUniqueId) },
-            screen: screen
-        )
+        let bars = OutlineSideBars.detect(sorted.map(\.sideBarItem), screen: screen)
         let placed: [(item: Rounded, region: Outline.Region)] = sorted.map { item in
             if let declared = item.collected.declaredRegion { return (item, declared) }
-            if let bar = bars.first(where: { $0.contains(item.frame) }) {
+            if let frame = item.sideBarItem.visibleFrame,
+               let bar = bars.first(where: { $0.contains(frame) }) {
                 return (item, Outline.Region(kind: bar.edge.rawValue, label: nil))
             }
             return (item, yBandRegion(for: item.frame, screenHeight: screen.height))
@@ -234,11 +232,21 @@ public enum OutlineFormatter {
         public let element: AccessibilityElement
         public let declaredRegion: Outline.Region?
         public let depth: Int
+        public let contentPanes: [Outline.Frame]
     }
 
     private struct Rounded {
         public let collected: Collected
         public let frame: Outline.Frame
+
+        var sideBarItem: OutlineSideBars.Item {
+            OutlineSideBars.Item(
+                frame: frame,
+                role: collected.element.type,
+                uniqueId: collected.element.normalizedUniqueId,
+                contentPanes: collected.contentPanes
+            )
+        }
     }
 
     // MARK: - Tree walking
@@ -254,6 +262,8 @@ public enum OutlineFormatter {
         element: AccessibilityElement,
         declaredRegion: Outline.Region?,
         depth: Int,
+        screen: Outline.Frame,
+        contentPanes: [Outline.Frame],
         collected: inout [Collected]
     ) {
         // A declared region is sticky: once we enter one, descendants
@@ -272,12 +282,20 @@ public enum OutlineFormatter {
             collected.append(Collected(
                 element: element,
                 declaredRegion: effectiveRegion,
-                depth: depth
+                depth: depth,
+                contentPanes: contentPanes
             ))
         }
 
+        var childPanes = contentPanes
+        if let pane = OutlineSideBars.contentPane(for: element, screen: screen) {
+            childPanes.append(pane)
+        }
         for child in element.children ?? [] {
-            walk(element: child, declaredRegion: effectiveRegion, depth: depth + 1, collected: &collected)
+            walk(
+                element: child, declaredRegion: effectiveRegion, depth: depth + 1,
+                screen: screen, contentPanes: childPanes, collected: &collected
+            )
         }
     }
 
