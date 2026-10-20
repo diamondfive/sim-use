@@ -81,7 +81,7 @@ public struct IOSSimRotateCommand: SimUseExecutableCommand {
         guard let reached = outcome.orientation else {
             return .line("Sent device orientation \(outcome.deviceOrientation); the result could not be read back.")
         }
-        let display = outcome.posture?.activeDisplay.map { " on display \($0.name)" } ?? ""
+        let display = outcome.posture?.activeDisplay.map { " on \($0.textName)" } ?? ""
         if outcome.confirmed {
             return .line("Rotated to \(reached)\(display) (device \(outcome.deviceOrientation)).")
         }

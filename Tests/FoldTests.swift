@@ -85,6 +85,10 @@ struct FoldTests {
             #expect(report["requested"] == nil)
             let posture = try #require(report["posture"] as? [String: Any])
             #expect((posture["integratedDisplays"] as? [String])?.count == 2)
+            #expect(posture["_displayLabel"] == nil)
+            #expect((posture["activeDisplay"] as? [String: Any])?["_displayLabel"] == nil)
+            let text = try await TestHelpers.runSimUseCommand("ios fold", simulatorUDID: udid)
+            #expect(text.output.contains("Posture: inner display active;"))
         }
     }
 
@@ -99,6 +103,27 @@ struct FoldTests {
             // From closed, a jump to 130° opens the inner display (plan E21).
             let active = try #require((half["posture"] as? [String: Any])?["activeDisplay"] as? [String: Any])
             #expect(active["primary"] as? Bool == false)
+            let text = try await TestHelpers.runSimUseCommand("ios fold", simulatorUDID: udid)
+            #expect(text.output.contains("Posture: inner display active;"))
+            #expect(!text.output.lowercased().contains("unfolded"))
+        }
+    }
+
+    @Test("folded: text names the cover while JSON keeps the main-display shape")
+    func coverDisplayReadPaths() async throws {
+        guard let udid = try await Self.duoUDID() else { return }
+        let simUse = try TestHelpers.getSimUsePath()
+        try await TestHelpers.launchPlaygroundApp(to: "tap-test")
+        try await Self.preservingPosture(udid: udid) {
+            _ = try await Self.fold("closed", udid: udid)
+            let rotation = try await TestHelpers.runSimUseCommand("ios rotate portrait", simulatorUDID: udid)
+            #expect(rotation.output.contains("on cover display"))
+            let text = try await TestHelpers.runSimUseCommand("ios fold", simulatorUDID: udid)
+            #expect(text.output.contains("Posture: cover display active; portrait"))
+            let (output, _) = try await CommandRunner.run("\(simUse) ui --json --no-raw --udid \(udid) 2>/dev/null")
+            let data = try #require(try Self.json(output)["data"] as? [String: Any])
+            #expect(data["display"] == nil)
+            #expect((data["outline"] as? String ?? "").contains("466x678  (cover display)"))
         }
     }
 
@@ -123,7 +148,9 @@ struct FoldTests {
             #expect(screen["width"] as? Int == 951)
             #expect(screen["height"] as? Int == 669)
             #expect(envelope["advisory"] == nil, "routing to the inner display needs no advisory: \(String(describing: envelope["advisory"]))")
-            #expect((data["outline"] as? String ?? "").contains("951x669  (landscape-left, display "))
+            #expect((data["outline"] as? String ?? "").contains("951x669  (landscape-left, inner display)"))
+            let rotation = try await TestHelpers.runSimUseCommand("ios rotate landscape-left", simulatorUDID: udid)
+            #expect(rotation.output.contains("on inner display"))
 
             let path = NSTemporaryDirectory() + "duo-inner-\(UUID().uuidString).png"
             defer { try? FileManager.default.removeItem(atPath: path) }

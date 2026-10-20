@@ -49,9 +49,9 @@ Detailed solutions for common sim-use issues. The symptom index in SKILL.md poin
 
 ## iOS: iPhone Duo (multi-display simulator)
 
-**Symptom:** The `ui` header ends in `display LCD-1` (for example `App: Settings  951x669  (landscape-left, display LCD-1)`; `--json`: a `data.display` object).
+**Symptom:** The `ui` header names `inner display` (for example `App: Settings  951x669  (landscape-left, inner display)`) or `cover display`. Older builds use `display LCD-1` for the inner screen. `--json` keeps raw names and ids; `data.display` is absent on the main/cover screen.
 
-**Why:** The iPhone Duo simulator (Xcode 27.1) has two integrated displays. Folded, the app is on the cover display, the main one. Unfolded, it is on the inner display (`LCD-1`). sim-use routes touch input, hit-tests, screenshots and video to the display that hosts the app and takes its orientation from CoreDevice.
+**Why:** The iPhone Duo simulator (Xcode 27.1) has two integrated displays: the primary cover and the inner panel. sim-use uses inner/cover aliases only for a verified Duo device type and valid two-panel topology; unknown layouts keep system names. The active screen is not a hinge measurement: a half-open device can use the inner screen too. sim-use routes touch input, hit-tests, screenshots and video to the display that hosts the app and takes its orientation from CoreDevice.
 
 **Recipes:**
 1. Check the posture: `sim-use ios fold --device <UDID>` names the active display and its orientation.
