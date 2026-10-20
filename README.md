@@ -287,7 +287,7 @@ sim-use paste 'ABC 日本語' --via-menu --target-id chatTextField --device $UDI
 sim-use paste 'at xy' --replace --via-menu --target-x 171 --target-y 513 --device $UDID
 ```
 
-The control must support the native edit menu. Native smart-paste formatting, single-line normalization and paste permission prompts still apply; sim-use does not approve prompts automatically. Verify the resulting field with `sim-use ui`.
+The control must support the native edit menu. `--replace` requires Select All unless the focused control exposes an explicitly empty accessibility value; otherwise it fails before Paste instead of appending. Existing menus require native-menu provenance to distinguish them from app controls. Anonymous modal menus need a verified native dismissal control in the same container; ambiguous or unsupported structures are refused instead of tapping app buttons. Native smart-paste formatting, single-line normalization and paste permission prompts still apply; sim-use does not approve prompts automatically. Verify the resulting field with `sim-use ui`. If completion cannot be confirmed after sending Paste, the command reports an ambiguous result without retrying. Check the field before you retry.
 
 Clipboard sharing can also change the Mac and other devices' clipboards. sim-use holds a host-wide lock for its own paste operations and verifies the clipboard again before Paste, but cannot lock out external apps. Do not run other clipboard writers during a paste. Clipboard mismatch errors never include unexpected contents.
 
@@ -351,6 +351,7 @@ Key semantics:
 
 - Exactly one step source per run: `--step`, `--file`, or `--stdin`.
 - Fail-fast by default; `--continue-on-error` switches to best-effort.
+- A transient boot-readiness failure does not automatically replay the batch. Earlier steps may have completed, including when `--continue-on-error` reports multiple failures. Inspect the UI and completed steps before retrying.
 - `--wait-timeout <seconds>` makes selector taps poll for the element to appear — primary mechanism for multi-screen flows.
 - `--ax-cache perBatch` (default) reuses one AX snapshot for the whole run; `--ax-cache perStep` refreshes between steps when the UI changes; `--ax-cache none` disables snapshot reuse entirely. `--wait-timeout` polling always refetches.
 

@@ -267,3 +267,7 @@ sharing enabled or assume the Mac clipboard is preserved.
 
 - Updated 2026-10-20: Implement verified staging and caret-preserving native-menu delivery — see [001-implementation-plan.md](001-implementation-plan.md).
 - Updated 2026-10-20: Complete implementation, live host validation and state restoration — see [002-action.md](002-action.md).
+- Updated 2026-10-20: Address review findings on replay, replacement, existing menus and localization — see [003-review-hardening.md](003-review-hardening.md).
+- Updated 2026-10-20: Require positive native menu evidence before dismissal — see [004-menu-presence-proof.md](004-menu-presence-proof.md).
+- Updated 2026-10-20: Prevent whole-batch replay after a later transient failure — see [005-batch-retry-policy.md](005-batch-retry-policy.md).
+- Updated 2026-10-20: Require modal menu provenance after ordinary Copy/Paste toolbars reopened R172-05 — see [006-modal-menu-provenance.md](006-modal-menu-provenance.md).

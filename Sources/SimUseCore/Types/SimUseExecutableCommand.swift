@@ -37,6 +37,11 @@ public protocol SimUseExecutableCommand: AsyncParsableCommand {
     /// does not fit the request-response envelope. Default false.
     var daemonBypass: Bool { get }
 
+    /// Whether a transient boot-readiness error permits the client to replay
+    /// the complete request. Multi-step commands can have completed earlier
+    /// side effects before a later query fails, so they must opt out.
+    var daemonAllowsTransientRetry: Bool { get }
+
     /// The argv tail (everything after `sim-use`) that the daemon parses
     /// for this command. The daemon runs with stdin on `/dev/null` and in
     /// its own working directory, so a command that reads the caller's
@@ -78,6 +83,7 @@ public protocol SimUseExecutableCommand: AsyncParsableCommand {
 extension SimUseExecutableCommand {
     // Protocol defaults.
     public var daemonBypass: Bool { false }
+    public var daemonAllowsTransientRetry: Bool { true }
     public func daemonArguments(from arguments: [String]) throws -> [String] { arguments }
     public var simulatorUDIDForDaemon: String? { nil }
     public var managesLivenessState: Bool { false }

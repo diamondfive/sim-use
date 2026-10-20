@@ -92,11 +92,11 @@ Every byte of command output you read costs context. Defaults that keep the loop
 
 Prefer `paste` for Unicode and IME-safe text. The default preserves the focused field's caret and selection. `--replace` selects all first. Use `--via-menu --target-id <id>` or `--target-x/--target-y` to focus a target explicitly. Both paths use the native Paste action; no hardware-keyboard or sync-setting change is needed.
 
-For multiline or shell-sensitive text, use `printf '%s' "$TEXT" | sim-use paste --stdin --device <UDID>` or `paste --file <path>`. The control's native rules still apply, including single-line normalization and smart-paste spaces. Always verify the actual field.
+For multiline or shell-sensitive text, use `printf '%s' "$TEXT" | sim-use paste --stdin --device <UDID>` or `paste --file <path>`. The control's native rules still apply, including single-line normalization and smart-paste spaces. `--replace` fails before Paste if Select All is unavailable and the field is not confirmed empty through accessibility. Never treat that refusal as a successful replacement. Unknown or ambiguous menu provenance is also refused; do not bypass that refusal by tapping a same-label app button. Always verify the actual field. If the command reports that Paste may have been sent, check the field before retrying; it does not automatically resend Paste.
 
 Shared clipboard sync can also overwrite the Mac and other devices. Keep one clipboard writer active. sim-use serializes its own paste operations and checks for unexpected readback, but cannot prevent external writes. Never print unrelated clipboard data or restore an old backup over newer external content.
 
-Batch paste supports default, replacement, files and explicit menu targets; `paste --stdin` is not a batch step because stdin belongs to the batch.
+Batch paste supports default, replacement, files and explicit menu targets; `paste --stdin` is not a batch step because stdin belongs to the batch. A failed batch is not automatically replayed after a transient boot-readiness error. Inspect the UI and completed steps before retrying, including with `--continue-on-error`.
 
 ### Physical iOS devices (experimental)
 

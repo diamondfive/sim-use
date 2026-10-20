@@ -178,7 +178,11 @@ public enum DaemonDispatch {
             let data = try await executable.executeAsDaemonResponse(id: request.id, processAdvisory: advisory)
             return Outcome(responseData: data, shouldStopDaemon: false)
         } catch {
-            let kind = DaemonErrorKind.classify(error)
+            let classifiedKind = DaemonErrorKind.classify(error)
+            // A later query can fail after an earlier step changed the UI.
+            // Keep its diagnostics, but do not replay an opted-out request.
+            let kind: DaemonErrorKind = classifiedKind == .transientBooting && !executable.daemonAllowsTransientRetry
+                ? .permanent : classifiedKind
             if kind == .staleSimulator {
                 return staleSimulatorOutcome(
                     id: request.id,

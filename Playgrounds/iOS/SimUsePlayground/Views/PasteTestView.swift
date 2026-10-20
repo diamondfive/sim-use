@@ -12,6 +12,7 @@ import SwiftUI
 struct PasteTestView: View {
     @State private var inputText = ""
     @State private var multiline = false
+    @State private var restrictSelectAll = false
     @State private var decoyTapCount = 0
     @FocusState private var isTextFieldFocused: Bool
 
@@ -34,7 +35,10 @@ struct PasteTestView: View {
 
             VStack(spacing: 16) {
                 Group {
-                    if multiline {
+                    if restrictSelectAll {
+                        PasteWithoutSelectAll(text: $inputText)
+                            .frame(height: 36)
+                    } else if multiline {
                         TextEditor(text: $inputText)
                             .frame(height: 90)
                             .overlay(RoundedRectangle(cornerRadius: 6).stroke(.secondary))
@@ -48,7 +52,7 @@ struct PasteTestView: View {
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
                     .accessibilityIdentifier("paste-input-field")
-                    .accessibilityValue(inputText.isEmpty ? "empty" : inputText)
+                    .accessibilityValue(inputText)
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Characters: \(inputText.count)")
@@ -65,11 +69,17 @@ struct PasteTestView: View {
                 .cornerRadius(8)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                Button("Clear") {
-                    inputText = ""
+                HStack {
+                    Button("Clear") {
+                        inputText = ""
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("paste-clear-button")
+                    Button(restrictSelectAll ? "Standard actions" : "No Select All") {
+                        restrictSelectAll.toggle()
+                    }
+                    .accessibilityIdentifier("paste-restrict-select-all")
                 }
-                .buttonStyle(.borderedProminent)
-                .accessibilityIdentifier("paste-clear-button")
             }
             .padding()
 
@@ -102,6 +112,45 @@ struct PasteTestView: View {
         .onAppear {
             isTextFieldFocused = true
         }
+    }
+}
+
+/// A native control that permits Paste but refuses Select All.
+private struct PasteWithoutSelectAll: UIViewRepresentable {
+    @Binding var text: String
+
+    final class Field: UITextField {
+        override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+            if action == #selector(selectAll(_:)) { return false }
+            return super.canPerformAction(action, withSender: sender)
+        }
+    }
+
+    final class Coordinator: NSObject {
+        var parent: PasteWithoutSelectAll
+        init(_ parent: PasteWithoutSelectAll) { self.parent = parent }
+
+        @objc func changed(_ field: UITextField) {
+            parent.text = field.text ?? ""
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeUIView(context: Context) -> Field {
+        let field = Field()
+        field.borderStyle = .roundedRect
+        field.autocorrectionType = .no
+        field.autocapitalizationType = .none
+        field.accessibilityIdentifier = "paste-input-field"
+        field.addTarget(context.coordinator, action: #selector(Coordinator.changed(_:)), for: .editingChanged)
+        return field
+    }
+
+    func updateUIView(_ field: Field, context: Context) {
+        context.coordinator.parent = self
+        if field.text != text { field.text = text }
+        field.accessibilityValue = text
     }
 }
 

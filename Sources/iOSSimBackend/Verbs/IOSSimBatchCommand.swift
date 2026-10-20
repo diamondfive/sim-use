@@ -32,7 +32,9 @@ public struct IOSSimBatchCommand: SimUseExecutableCommand {
         abstract: "Execute ordered interaction steps using one iOS simulator/HID session.",
         discussion: """
         Batch executes multiple interaction steps in one command to reduce overhead.
-        Steps are executed in order.
+        Steps are executed in order. A transient boot-readiness failure does
+        not automatically replay the batch: earlier steps may have completed.
+        Inspect the UI before an explicit retry, including with --continue-on-error.
 
         Supported step commands:
           tap, swipe, gesture, touch, type, paste, button, key, key-sequence, key-combo
@@ -120,6 +122,7 @@ public struct IOSSimBatchCommand: SimUseExecutableCommand {
     }
 
     public var simulatorUDIDForDaemon: String? { device.resolved }
+    public var daemonAllowsTransientRetry: Bool { false }
 
     // The daemon runs with stdin on /dev/null (LINEIOS-216940) and in its
     // own working directory, so `--stdin` and a relative `--file` cannot

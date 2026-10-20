@@ -1,5 +1,10 @@
 # 011 — Simulator paste: Action log
 
+> Updated 2026-10-20: Review found gaps in post-send error handling, missing
+> Select All, existing-menu matching and localization. The implementation and
+> verification below describe `5f0a30c`. See [review hardening](003-review-hardening.md)
+> for the corrections and their separate verification.
+
 ## Status
 
 Implementation and local validation are complete on the branch. Review and

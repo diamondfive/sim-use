@@ -33,7 +33,10 @@ public struct IOSSimPasteCommand: SimUseExecutableCommand {
 
         --via-menu instead long-presses --target-id or --target-x/--target-y.
         Use it to focus a target explicitly or for a custom control that does
-        not respond to the Application key. --replace selects all first.
+        not respond to the Application key. --replace requires Select All,
+        unless accessibility confirms an empty editing control. Otherwise it
+        fails before Paste instead of appending. If completion is ambiguous,
+        verify the field before retrying; Paste is not automatically resent.
 
         Native editing rules and paste permission prompts still apply. A
         control must support the iOS edit menu. Shared clipboard sync can
@@ -198,10 +201,17 @@ public struct IOSSimPasteCommand: SimUseExecutableCommand {
 
         let lease = try await PasteboardLock.acquire()
         defer { withExtendedLifetime(lease) {} }
-        let before = try await fetchLightweightTree(logger: logger)
+        let before: [AccessibilityElement]
+        if viaMenu {
+            before = try await prepareEditMenu(logger: logger, session: session)
+        } else {
+            before = try await fetchLightweightTree(logger: logger)
+        }
+        try PasteEditMenu.validatePresentation(in: before)
         let existingMenu = !viaMenu && PasteEditMenu.isPresented(in: before)
-        var baseline = existingMenu ? [] : PasteEditMenu.items(in: before)
-        logger.info().log("Edit menu already present: \(existingMenu); baseline controls: \(baseline.count)")
+        let existingActions = existingMenu ? PasteEditMenu.actionItems(in: before, excluding: []) : []
+        var baseline = PasteEditMenu.items(in: before).filter { !existingActions.contains($0) }
+        var emptyTargetConfirmed = false
         let target = viaMenu ? try await resolveTargetPoint(logger: logger) : nil
         try await RoutingDisplayGuard.assertTouchInputReachesApp(udid: device.resolved, verb: "paste", logger: logger)
 
@@ -213,12 +223,9 @@ public struct IOSSimPasteCommand: SimUseExecutableCommand {
             try await press(at: target.0, duration: max(0.1, longPressDuration), session: session, logger: logger)
         }
         if replace {
-            let current = try await fetchLightweightTree(logger: logger)
-            if PasteEditMenu.isPresented(in: current) {
-                try await performHIDEvent(.shortKeyPress(PasteHIDKeycode.escape), session: session, logger: logger)
-                try await Task.sleep(for: .seconds(1))
-                baseline = PasteEditMenu.items(in: try await fetchLightweightTree(logger: logger))
-            }
+            let current = try await prepareEditMenu(logger: logger, session: session)
+            baseline = PasteEditMenu.items(in: current)
+            emptyTargetConfirmed = PasteEditMenu.emptyEditingTargetConfirmed(in: current)
             // A word selection can hide Select All. Collapse it first; unlike
             // normal paste, replacement intentionally discards the old range.
             try await performHIDEvent(.shortKeyPress(PasteHIDKeycode.rightArrow), session: session, logger: logger)
@@ -227,7 +234,8 @@ public struct IOSSimPasteCommand: SimUseExecutableCommand {
             try await openFocusedEditMenu(session: session, logger: logger)
         }
         try await pasteViaEditMenu(
-            baseline: baseline, calibration: target?.1, session: session,
+            baseline: baseline, emptyTargetConfirmed: emptyTargetConfirmed,
+            calibration: target?.1, session: session,
             verify: { try await board.verify(text: inputText, udid: device.resolved, backend: backend) },
             logger: logger
         )
@@ -267,12 +275,30 @@ public struct IOSSimPasteCommand: SimUseExecutableCommand {
         return (hidTarget.hid, hidTarget.calibration)
     }
 
+    private func prepareEditMenu(logger: SimUseLogger, session: HIDInteractor.Session?) async throws -> [AccessibilityElement] {
+        try await PasteEditMenu.prepare(
+            fetch: { try await fetchLightweightTree(logger: logger) },
+            // Only replacement and explicit retargeting use this path. Ordinary
+            // paste reuses the menu without touching the field or its selection.
+            dismiss: { roots in
+                if let target = PasteEditMenu.dismissalTarget(in: roots) {
+                    try await tapMenuItem(target, roots: roots, calibration: nil, session: session, logger: logger)
+                } else {
+                    try await performHIDEvent(.shortKeyPress(PasteHIDKeycode.escape), session: session, logger: logger)
+                    try await performHIDEvent(.shortKeyPress(PasteHIDKeycode.rightArrow), session: session, logger: logger)
+                }
+            },
+            timeout: menuTimeout
+        )
+    }
+
     private func openFocusedEditMenu(session: HIDInteractor.Session?, logger: SimUseLogger) async throws {
         try await performHIDEvent(.shortKeyPress(PasteHIDKeycode.applicationMenu), session: session, logger: logger)
     }
 
     private func pasteViaEditMenu(
         baseline: [PasteEditMenu.Item],
+        emptyTargetConfirmed: Bool,
         calibration: OrientationCalibration?,
         session: HIDInteractor.Session?,
         verify: () async throws -> Void,
@@ -293,7 +319,11 @@ public struct IOSSimPasteCommand: SimUseExecutableCommand {
             initial = try await waitForEditMenu(excluding: baseline, logger: logger)
         }
         var roots = initial
-        if replace, let selectAll = PasteEditMenu.item(labels: PasteEditMenu.selectAllLabels, in: roots, excluding: baseline) {
+        let selectAll = PasteEditMenu.item(labels: PasteEditMenu.selectAllLabels, in: roots, excluding: baseline)
+        if replace {
+            try PasteEditMenu.validateReplacement(selectAll: selectAll, emptyTargetConfirmed: emptyTargetConfirmed)
+        }
+        if replace, let selectAll {
             try await tapMenuItem(selectAll, roots: roots, calibration: calibration, session: session, logger: logger)
             do {
                 roots = try await waitForEditMenu(excluding: baseline, selectAllMustDisappear: true, logger: logger)
@@ -311,8 +341,10 @@ public struct IOSSimPasteCommand: SimUseExecutableCommand {
         guard PasteEditMenu.item(labels: PasteEditMenu.pasteLabels, in: latest, excluding: baseline) == paste else {
             throw CLIError(errorDescription: "The edit menu changed before Paste. No paste action was sent.")
         }
-        try await tapMenuItem(paste, roots: latest, calibration: calibration, session: session, logger: logger)
-        try await waitForMenuDismissal(paste, logger: logger)
+        try await PasteDelivery.perform(
+            send: { try await tapMenuItem(paste, roots: latest, calibration: calibration, session: session, logger: logger) },
+            waitForCompletion: { try await waitForMenuDismissal(paste, logger: logger) }
+        )
     }
 
     private func waitForMenuDismissal(_ clicked: PasteEditMenu.Item, logger: SimUseLogger) async throws {
@@ -362,7 +394,7 @@ public struct IOSSimPasteCommand: SimUseExecutableCommand {
         while clock.now < deadline {
             let roots = try await fetchLightweightTree(logger: logger)
             let labels = PasteEditMenu.pasteLabels.union(PasteEditMenu.selectAllLabels)
-            let items = PasteEditMenu.items(in: roots).filter { labels.contains($0.label) && !$0.isPreexisting(in: baseline) }
+            let items = PasteEditMenu.actionItems(in: roots, excluding: baseline).filter { labels.contains($0.label) }
             if readiness.observe(items, at: clock.now, selectAllMustDisappear: selectAllMustDisappear) { return roots }
             try await Task.sleep(for: .milliseconds(120))
         }

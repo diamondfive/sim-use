@@ -11,6 +11,10 @@
 > and work notes. It is a retrospective reconstruction, not a plan written
 > before the work.
 
+> Updated 2026-10-20: iOS batches opt out of automatic transient-booting
+> request replay because earlier steps can have side effects. Other commands
+> retain the retry behavior below. See [011.005](../011-device-hub-paste/005-batch-retry-policy.md).
+
 ## Background
 
 A cold sim-use command loads the FB* frameworks, builds an `FBSimulatorSet`,
@@ -119,3 +123,4 @@ transport was auto-selected within `HIDBootIdentity.transportTrustWindow`
 ## Amendments
 
 - Updated 2026-10-14: HID from short-lived processes is lost on the dtuhidd transport; all input verbs go through the daemon (#154) — see [001-dtuhidd-short-lived-clients.md](001-dtuhidd-short-lived-clients.md)
+- Updated 2026-10-20: Add a command-level transient-retry policy; batches cannot be replayed after partial execution — see [011.005](../011-device-hub-paste/005-batch-retry-policy.md).
