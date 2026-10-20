@@ -17,20 +17,18 @@ import SimUseCore
 ///    least one more element above or below it, reaching below the top
 ///    band — a regular navigation bar keeps the status clock and the back
 ///    button both inside it — or at least two tabs stacked vertically.
-/// 3. The app's wide content stays clear of the bar: beside the bar (in
-///    its vertical range) at least one wide element exists, and nothing
-///    except a container (full screen, or a full-width group) crosses the
-///    bar's inner edge. On a regular iPhone the back button and row icons
-///    share the leading strip, but every row runs across it. The one
-///    exception is an app's own header above the bar in the top band,
-///    which may start inside the strip (LINE on the cover in
-///    landscape-right). Content only below the column is no evidence.
+/// 3. Content stays clear of the bar's inner edge, except containers
+///    (full screen, or a full-width group) and an app header above the bar
+///    in the top band. On a regular iPhone the back button and row icons
+///    share the leading strip, but every row runs across it. Small content
+///    cards do not need a single wide node to prove a bar.
 ///
 /// Side-bar evidence uses the horizontal bounds of full-height content
 /// panes. AX child frames can extend past those panes without being visible
 /// in the bar; printed frames and hit targets remain unchanged.
 ///
-/// Work record: docs/ai/010-display-routing/002-side-bar-content-overflow.md.
+/// Work records: docs/ai/010-display-routing/002-side-bar-content-overflow.md,
+/// docs/ai/010-display-routing/004-remove-wide-content-gate.md.
 enum OutlineSideBars {
     enum Edge: String {
         case leading = "Leading"
@@ -120,13 +118,10 @@ enum OutlineSideBars {
         case .trailing: boundary = members.map(\.frame.x).min() ?? screen.width
         }
 
-        // Wide content beside the bar, and no content across its edge
-        // except an app header above it in the top band.
+        // Content stays clear of the bar's edge, except an app header
+        // above it in the top band.
         let barTop = members.map(\.frame.y).min() ?? 0
-        let barBottom = members.map { $0.frame.y + $0.frame.height }.max() ?? screen.height
         let content = items.filter { !isContainer($0, screen: screen) }.map(\.frame)
-        let beside = content.filter { $0.y < barBottom && $0.y + $0.height > barTop }
-        guard beside.contains(where: { $0.width * 2 >= screen.width }) else { return nil }
         let headerBottom = min(barTop, OutlineFormatter.yBandInset)
         let crossed = content.contains {
             $0.y + $0.height > headerBottom && $0.x < boundary && $0.x + $0.width > boundary

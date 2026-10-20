@@ -7,6 +7,9 @@
 > Updated 2026-10-20: Duo display labels in default text use validated
 > inner/cover aliases; raw JSON names stay unchanged. See [003-readable-display-names.md](003-readable-display-names.md).
 
+> Updated 2026-10-20: the S4 requirement for a single wide content node is
+> removed. Anchor, stack and crossing checks remain. See [004-remove-wide-content-gate.md](004-remove-wide-content-gate.md).
+
 | | |
 | --- | --- |
 | **Status** | Implemented in the stack #157, #158, #161, #163, #164, #165 (awaiting merge) |
@@ -443,3 +446,4 @@ Result: works (E48–E52). dtuhidd can be started on demand; Indigo cannot route
 - Updated 2026-10-17: all six slices done; action log in [001-action.md](001-action.md)
 - Updated 2026-10-20: side-bar evidence must respect full-height content panes when child AX frames overflow — see [002-side-bar-content-overflow.md](002-side-bar-content-overflow.md).
 - Updated 2026-10-20: readable Duo display names — see [003-readable-display-names.md](003-readable-display-names.md).
+- Updated 2026-10-20: remove the single-wide-node side-bar gate — see [004-remove-wide-content-gate.md](004-remove-wide-content-gate.md).

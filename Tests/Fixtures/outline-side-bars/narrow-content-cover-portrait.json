@@ -1,0 +1,805 @@
+{
+  "screen": {
+    "height": 678,
+    "width": 466,
+    "x": 0,
+    "y": 0
+  },
+  "raw": [
+    {
+      "AXFrame": "{{0, 0}, {466, 678}}",
+      "content_required": false,
+      "enabled": true,
+      "frame": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "role": "AXApplication",
+      "role_description": "application",
+      "subrole": null,
+      "traits": [
+        "None"
+      ],
+      "type": "Application",
+      "AXLabel": "Caption 1",
+      "AXUniqueId": null,
+      "AXValue": null,
+      "children": [
+        {
+          "AXFrame": "{{20, 36}, {38.333333333333336, 24}}",
+          "content_required": false,
+          "enabled": true,
+          "frame": {
+            "height": 24,
+            "width": 38.333333333333336,
+            "x": 20,
+            "y": 36
+          },
+          "role": "AXStaticText",
+          "role_description": "text",
+          "subrole": null,
+          "traits": [
+            "Scrollable",
+            "StaticText"
+          ],
+          "type": "StaticText",
+          "AXLabel": "Caption 2",
+          "AXUniqueId": null,
+          "AXValue": null,
+          "children": []
+        },
+        {
+          "AXFrame": "{{338, 36}, {40, 24}}",
+          "content_required": false,
+          "enabled": true,
+          "frame": {
+            "height": 24,
+            "width": 40,
+            "x": 338,
+            "y": 36
+          },
+          "role": "AXButton",
+          "role_description": "button",
+          "subrole": null,
+          "traits": [
+            "Scrollable",
+            "Button"
+          ],
+          "type": "Button",
+          "AXLabel": "Caption 3",
+          "AXUniqueId": null,
+          "AXValue": null,
+          "children": []
+        },
+        {
+          "AXFrame": "{{16, 87.666666666666671}, {306, 39}}",
+          "content_required": false,
+          "enabled": true,
+          "frame": {
+            "height": 39,
+            "width": 306,
+            "x": 16,
+            "y": 87.66666666666667
+          },
+          "role": "AXGenericElement",
+          "role_description": "",
+          "subrole": "AXSearchField",
+          "traits": [
+            "Scrollable",
+            "SearchField"
+          ],
+          "type": "GenericElement",
+          "AXLabel": "Caption 4",
+          "AXUniqueId": null,
+          "AXValue": null,
+          "children": []
+        },
+        {
+          "AXFrame": "{{327, 87.666666666666671}, {39, 39}}",
+          "content_required": false,
+          "enabled": true,
+          "frame": {
+            "height": 39,
+            "width": 39,
+            "x": 327,
+            "y": 87.66666666666667
+          },
+          "role": "AXButton",
+          "role_description": "button",
+          "subrole": null,
+          "traits": [
+            "Scrollable",
+            "Button"
+          ],
+          "type": "Button",
+          "AXLabel": null,
+          "AXUniqueId": null,
+          "AXValue": null,
+          "children": []
+        },
+        {
+          "AXFrame": "{{396, 394}, {44, 58}}",
+          "content_required": false,
+          "enabled": true,
+          "frame": {
+            "height": 58,
+            "width": 44,
+            "x": 396,
+            "y": 394
+          },
+          "role": "AXRadioButton",
+          "role_description": "tab",
+          "subrole": "AXTabButton",
+          "traits": [
+            "TabButton",
+            "Scrollable",
+            "Button"
+          ],
+          "type": "RadioButton",
+          "AXLabel": "Caption 5",
+          "AXUniqueId": "control-1",
+          "AXValue": 0,
+          "children": []
+        },
+        {
+          "AXFrame": "{{396, 444}, {44, 58}}",
+          "content_required": false,
+          "enabled": true,
+          "frame": {
+            "height": 58,
+            "width": 44,
+            "x": 396,
+            "y": 444
+          },
+          "role": "AXRadioButton",
+          "role_description": "tab",
+          "subrole": "AXTabButton",
+          "traits": [
+            "TabButton",
+            "Scrollable",
+            "Button"
+          ],
+          "type": "RadioButton",
+          "AXLabel": "Caption 6",
+          "AXUniqueId": "control-2",
+          "AXValue": 0,
+          "children": []
+        },
+        {
+          "AXFrame": "{{396, 494}, {44, 58}}",
+          "content_required": false,
+          "enabled": true,
+          "frame": {
+            "height": 58,
+            "width": 44,
+            "x": 396,
+            "y": 494
+          },
+          "role": "AXRadioButton",
+          "role_description": "tab",
+          "subrole": "AXTabButton",
+          "traits": [
+            "TabButton",
+            "Scrollable",
+            "Button"
+          ],
+          "type": "RadioButton",
+          "AXLabel": "Caption 7",
+          "AXUniqueId": "control-3",
+          "AXValue": 0,
+          "children": []
+        },
+        {
+          "AXFrame": "{{396, 544}, {44, 58}}",
+          "content_required": false,
+          "enabled": true,
+          "frame": {
+            "height": 58,
+            "width": 44,
+            "x": 396,
+            "y": 544
+          },
+          "role": "AXRadioButton",
+          "role_description": "tab",
+          "subrole": "AXTabButton",
+          "traits": [
+            "Button",
+            "TabButton",
+            "Selected",
+            "Scrollable"
+          ],
+          "type": "RadioButton",
+          "AXLabel": "Caption 2",
+          "AXUniqueId": "control-4",
+          "AXValue": 1,
+          "children": []
+        },
+        {
+          "AXFrame": "{{396, 594}, {44, 58}}",
+          "content_required": false,
+          "enabled": true,
+          "frame": {
+            "height": 58,
+            "width": 44,
+            "x": 396,
+            "y": 594
+          },
+          "role": "AXRadioButton",
+          "role_description": "tab",
+          "subrole": "AXTabButton",
+          "traits": [
+            "TabButton",
+            "Scrollable",
+            "Button"
+          ],
+          "type": "RadioButton",
+          "AXLabel": "Caption 8",
+          "AXUniqueId": "control-5",
+          "AXValue": 0,
+          "children": []
+        },
+        {
+          "AXFrame": "{{28, 154}, {54, 12}}",
+          "content_required": false,
+          "enabled": true,
+          "frame": {
+            "height": 12,
+            "width": 54,
+            "x": 28,
+            "y": 154
+          },
+          "role": "AXLink",
+          "role_description": "link",
+          "subrole": null,
+          "synthesized": true,
+          "traits": [
+            "Link",
+            "TextOperationsAvailable",
+            "StaticText",
+            "WebContent",
+            "Scrollable"
+          ],
+          "type": "Link",
+          "AXLabel": "Caption 9",
+          "AXUniqueId": null,
+          "AXValue": "",
+          "children": []
+        },
+        {
+          "AXFrame": "{{226, 154}, {44, 12}}",
+          "content_required": false,
+          "enabled": true,
+          "frame": {
+            "height": 12,
+            "width": 44,
+            "x": 226,
+            "y": 154
+          },
+          "role": "AXLink",
+          "role_description": "link",
+          "subrole": null,
+          "synthesized": true,
+          "traits": [
+            "Link",
+            "TextOperationsAvailable",
+            "StaticText",
+            "WebContent",
+            "Scrollable"
+          ],
+          "type": "Link",
+          "AXLabel": "Caption 10",
+          "AXUniqueId": null,
+          "AXValue": "",
+          "children": []
+        },
+        {
+          "AXFrame": "{{92, 205}, {198, 44}}",
+          "content_required": false,
+          "enabled": true,
+          "frame": {
+            "height": 44,
+            "width": 198,
+            "x": 92,
+            "y": 205
+          },
+          "role": "AXImage",
+          "role_description": "image",
+          "subrole": null,
+          "synthesized": true,
+          "traits": [
+            "TextOperationsAvailable",
+            "Image",
+            "WebContent",
+            "Scrollable"
+          ],
+          "type": "Image",
+          "AXLabel": "",
+          "AXUniqueId": null,
+          "AXValue": "",
+          "children": []
+        },
+        {
+          "AXFrame": "{{16, 287}, {150, 100}}",
+          "content_required": false,
+          "enabled": true,
+          "frame": {
+            "height": 100,
+            "width": 150,
+            "x": 16,
+            "y": 287
+          },
+          "role": "AXLink",
+          "role_description": "link",
+          "subrole": null,
+          "synthesized": true,
+          "traits": [
+            "Link",
+            "TextOperationsAvailable",
+            "Image",
+            "WebContent",
+            "Scrollable"
+          ],
+          "type": "Link",
+          "AXLabel": "",
+          "AXUniqueId": null,
+          "AXValue": "",
+          "children": []
+        },
+        {
+          "AXFrame": "{{174, 287}, {150, 100}}",
+          "content_required": false,
+          "enabled": true,
+          "frame": {
+            "height": 100,
+            "width": 150,
+            "x": 174,
+            "y": 287
+          },
+          "role": "AXLink",
+          "role_description": "link",
+          "subrole": null,
+          "synthesized": true,
+          "traits": [
+            "Link",
+            "TextOperationsAvailable",
+            "Image",
+            "WebContent",
+            "Scrollable"
+          ],
+          "type": "Link",
+          "AXLabel": "",
+          "AXUniqueId": null,
+          "AXValue": "",
+          "children": []
+        },
+        {
+          "AXFrame": "{{16, 395}, {134, 38}}",
+          "content_required": false,
+          "enabled": true,
+          "frame": {
+            "height": 38,
+            "width": 134,
+            "x": 16,
+            "y": 395
+          },
+          "role": "AXLink",
+          "role_description": "link",
+          "subrole": null,
+          "synthesized": true,
+          "traits": [
+            "Link",
+            "TextOperationsAvailable",
+            "StaticText",
+            "WebContent",
+            "Scrollable"
+          ],
+          "type": "Link",
+          "AXLabel": "Caption 11",
+          "AXUniqueId": null,
+          "AXValue": "",
+          "children": []
+        },
+        {
+          "AXFrame": "{{174, 395}, {147, 38}}",
+          "content_required": false,
+          "enabled": true,
+          "frame": {
+            "height": 38,
+            "width": 147,
+            "x": 174,
+            "y": 395
+          },
+          "role": "AXLink",
+          "role_description": "link",
+          "subrole": null,
+          "synthesized": true,
+          "traits": [
+            "Link",
+            "TextOperationsAvailable",
+            "StaticText",
+            "WebContent",
+            "Scrollable"
+          ],
+          "type": "Link",
+          "AXLabel": "Caption 12",
+          "AXUniqueId": null,
+          "AXValue": "",
+          "children": []
+        },
+        {
+          "AXFrame": "{{40, 505}, {130, 18}}",
+          "content_required": false,
+          "enabled": true,
+          "frame": {
+            "height": 18,
+            "width": 130,
+            "x": 40,
+            "y": 505
+          },
+          "role": "AXLink",
+          "role_description": "link",
+          "subrole": null,
+          "synthesized": true,
+          "traits": [
+            "Link",
+            "TextOperationsAvailable",
+            "StaticText",
+            "WebContent",
+            "Scrollable"
+          ],
+          "type": "Link",
+          "AXLabel": "Caption 13",
+          "AXUniqueId": null,
+          "AXValue": "",
+          "children": []
+        },
+        {
+          "AXFrame": "{{40, 550}, {182, 18}}",
+          "content_required": false,
+          "enabled": true,
+          "frame": {
+            "height": 18,
+            "width": 182,
+            "x": 40,
+            "y": 550
+          },
+          "role": "AXLink",
+          "role_description": "link",
+          "subrole": null,
+          "synthesized": true,
+          "traits": [
+            "Link",
+            "TextOperationsAvailable",
+            "StaticText",
+            "WebContent",
+            "Scrollable"
+          ],
+          "type": "Link",
+          "AXLabel": "Caption 14",
+          "AXUniqueId": null,
+          "AXValue": "",
+          "children": []
+        },
+        {
+          "AXFrame": "{{16, 603}, {128, 19}}",
+          "content_required": false,
+          "enabled": true,
+          "frame": {
+            "height": 19,
+            "width": 128,
+            "x": 16,
+            "y": 603
+          },
+          "role": "AXHeading",
+          "role_description": "heading",
+          "subrole": null,
+          "synthesized": true,
+          "traits": [
+            "TextOperationsAvailable",
+            "Header",
+            "StaticText",
+            "WebContent",
+            "Scrollable"
+          ],
+          "type": "Heading",
+          "AXLabel": "Caption 15",
+          "AXUniqueId": null,
+          "AXValue": "Caption 16",
+          "children": []
+        },
+        {
+          "AXFrame": "{{147, 605}, {114, 14}}",
+          "content_required": false,
+          "enabled": true,
+          "frame": {
+            "height": 14,
+            "width": 114,
+            "x": 147,
+            "y": 605
+          },
+          "role": "AXStaticText",
+          "role_description": "text",
+          "subrole": null,
+          "synthesized": true,
+          "traits": [
+            "TextOperationsAvailable",
+            "StaticText",
+            "WebContent",
+            "Scrollable"
+          ],
+          "type": "StaticText",
+          "AXLabel": "Caption 17",
+          "AXUniqueId": null,
+          "AXValue": "",
+          "children": []
+        },
+        {
+          "AXFrame": "{{50, 464}, {136, 19}}",
+          "content_required": false,
+          "enabled": true,
+          "frame": {
+            "height": 19,
+            "width": 136,
+            "x": 50,
+            "y": 464
+          },
+          "role": "AXStaticText",
+          "role_description": "text",
+          "subrole": null,
+          "synthesized": true,
+          "traits": [
+            "TextOperationsAvailable",
+            "StaticText",
+            "WebContent",
+            "Scrollable"
+          ],
+          "type": "StaticText",
+          "AXLabel": "Caption 18",
+          "AXUniqueId": null,
+          "AXValue": "",
+          "children": []
+        },
+        {
+          "AXFrame": "{{174, 287}, {150, 147}}",
+          "content_required": false,
+          "enabled": true,
+          "frame": {
+            "height": 147,
+            "width": 150,
+            "x": 174,
+            "y": 287
+          },
+          "role": "AXLink",
+          "role_description": "link",
+          "subrole": null,
+          "synthesized": true,
+          "traits": [
+            "Link",
+            "TextOperationsAvailable",
+            "WebContent",
+            "Scrollable"
+          ],
+          "type": "Link",
+          "AXLabel": "Caption 12",
+          "AXUniqueId": null,
+          "AXValue": "",
+          "children": []
+        },
+        {
+          "AXFrame": "{{174, 258}, {79, 18}}",
+          "content_required": false,
+          "enabled": true,
+          "frame": {
+            "height": 18,
+            "width": 79,
+            "x": 174,
+            "y": 258
+          },
+          "role": "AXStaticText",
+          "role_description": "text",
+          "subrole": null,
+          "synthesized": true,
+          "traits": [
+            "TextOperationsAvailable",
+            "StaticText",
+            "WebContent",
+            "Scrollable"
+          ],
+          "type": "StaticText",
+          "AXLabel": "Caption 19",
+          "AXUniqueId": null,
+          "AXValue": "",
+          "children": []
+        },
+        {
+          "AXFrame": "{{16, 627}, {150, 30}}",
+          "content_required": false,
+          "enabled": true,
+          "frame": {
+            "height": 30,
+            "width": 150,
+            "x": 16,
+            "y": 627
+          },
+          "role": "AXLink",
+          "role_description": "link",
+          "subrole": null,
+          "synthesized": true,
+          "traits": [
+            "Link",
+            "TextOperationsAvailable",
+            "WebContent",
+            "Scrollable"
+          ],
+          "type": "Link",
+          "AXLabel": "Caption 20",
+          "AXUniqueId": null,
+          "AXValue": "",
+          "children": []
+        },
+        {
+          "AXFrame": "{{196, 633}, {58, 18}}",
+          "content_required": false,
+          "enabled": true,
+          "frame": {
+            "height": 18,
+            "width": 58,
+            "x": 196,
+            "y": 633
+          },
+          "role": "AXLink",
+          "role_description": "link",
+          "subrole": null,
+          "synthesized": true,
+          "traits": [
+            "Link",
+            "TextOperationsAvailable",
+            "StaticText",
+            "WebContent",
+            "Scrollable"
+          ],
+          "type": "Link",
+          "AXLabel": "Caption 21",
+          "AXUniqueId": null,
+          "AXValue": "",
+          "children": []
+        },
+        {
+          "AXFrame": "{{174, 627}, {150, 30}}",
+          "content_required": false,
+          "enabled": true,
+          "frame": {
+            "height": 30,
+            "width": 150,
+            "x": 174,
+            "y": 627
+          },
+          "role": "AXLink",
+          "role_description": "link",
+          "subrole": null,
+          "synthesized": true,
+          "traits": [
+            "Link",
+            "TextOperationsAvailable",
+            "WebContent",
+            "Scrollable"
+          ],
+          "type": "Link",
+          "AXLabel": "Caption 22",
+          "AXUniqueId": null,
+          "AXValue": "",
+          "children": []
+        },
+        {
+          "AXFrame": "{{16, 287}, {150, 147}}",
+          "content_required": false,
+          "enabled": true,
+          "frame": {
+            "height": 147,
+            "width": 150,
+            "x": 16,
+            "y": 287
+          },
+          "role": "AXLink",
+          "role_description": "link",
+          "subrole": null,
+          "synthesized": true,
+          "traits": [
+            "Link",
+            "TextOperationsAvailable",
+            "WebContent",
+            "Scrollable"
+          ],
+          "type": "Link",
+          "AXLabel": "Caption 11",
+          "AXUniqueId": null,
+          "AXValue": "",
+          "children": []
+        },
+        {
+          "AXFrame": "{{109, 154}, {34, 12}}",
+          "content_required": false,
+          "enabled": true,
+          "frame": {
+            "height": 12,
+            "width": 34,
+            "x": 109,
+            "y": 154
+          },
+          "role": "AXLink",
+          "role_description": "link",
+          "subrole": null,
+          "synthesized": true,
+          "traits": [
+            "Link",
+            "TextOperationsAvailable",
+            "StaticText",
+            "WebContent",
+            "Scrollable"
+          ],
+          "type": "Link",
+          "AXLabel": "Caption 23",
+          "AXUniqueId": null,
+          "AXValue": "",
+          "children": []
+        },
+        {
+          "AXFrame": "{{170, 154}, {22, 12}}",
+          "content_required": false,
+          "enabled": true,
+          "frame": {
+            "height": 12,
+            "width": 22,
+            "x": 170,
+            "y": 154
+          },
+          "role": "AXLink",
+          "role_description": "link",
+          "subrole": null,
+          "synthesized": true,
+          "traits": [
+            "Link",
+            "TextOperationsAvailable",
+            "StaticText",
+            "WebContent",
+            "Scrollable"
+          ],
+          "type": "Link",
+          "AXLabel": "Caption 24",
+          "AXUniqueId": null,
+          "AXValue": "",
+          "children": []
+        },
+        {
+          "AXFrame": "{{297, 154}, {45, 12}}",
+          "content_required": false,
+          "enabled": true,
+          "frame": {
+            "height": 12,
+            "width": 45,
+            "x": 297,
+            "y": 154
+          },
+          "role": "AXLink",
+          "role_description": "link",
+          "subrole": null,
+          "synthesized": true,
+          "traits": [
+            "Link",
+            "TextOperationsAvailable",
+            "StaticText",
+            "WebContent",
+            "Scrollable"
+          ],
+          "type": "Link",
+          "AXLabel": "Caption 25",
+          "AXUniqueId": null,
+          "AXValue": "",
+          "children": []
+        }
+      ]
+    }
+  ]
+}

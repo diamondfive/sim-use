@@ -97,6 +97,51 @@ struct OutlineSideBarTests {
         #expect(outline.entries.map(\.aliases.at) == Array(1...outline.entries.count))
     }
 
+    @Test("narrow content cards do not hide the cover display's tab bar")
+    func narrowContentCapture() throws {
+        let outline = try render("narrow-content-cover-portrait")
+        #expect(outline.sideKinds == ["Trailing"])
+        for index in 1...5 {
+            #expect(outline.regionKind(id: "control-\(index)") == "Trailing")
+        }
+        let card = try #require(outline.entries.first { $0.frame == Outline.Frame(x: 174, y: 287, width: 150, height: 147) })
+        #expect(card.role == "Link")
+        #expect(card.region.kind == "Content")
+        #expect(outline.entries.count == 30)
+        #expect(outline.text.contains("[Trailing  x>=396]"))
+        #expect(outline.entries.map(\.aliases.at) == Array(1...outline.entries.count))
+    }
+
+    @Test("vertical tabs allow narrow or absent content on either edge", arguments: [false, true], [false, true])
+    func narrowContentTabs(mirrored: Bool, emptyContent: Bool) throws {
+        func x(_ value: Int, _ width: Int) -> Int { mirrored ? 466 - value - width : value }
+        let side = mirrored ? "Leading" : "Trailing"
+        let tabs = (0..<5).map { element("RadioButton", "Tab \($0)", x(396, 44), 394 + 50 * $0, 44, 58) }
+        let cards = emptyContent ? [] : [
+            element("Link", "Card 1", x(16, 150), 400, 150, 147),
+            element("Link", "Card 2", x(174, 150), 400, 150, 147),
+        ]
+        let outline = OutlineFormatter.render(tree: try tree((tabs + cards).joined(separator: ","), width: 466, height: 678))
+        #expect(outline.sideKinds == [side])
+        for index in 0..<5 {
+            #expect(outline.regionKind(label: "Tab \(index)") == side)
+        }
+        if !emptyContent {
+            for label in ["Card 1", "Card 2"] {
+                #expect(outline.regionKind(label: label) == "Content")
+            }
+        }
+    }
+
+    @Test("narrow content crossing the tab column still blocks a bar on either edge", arguments: [false, true])
+    func narrowContentCrossing(mirrored: Bool) throws {
+        func x(_ value: Int, _ width: Int) -> Int { mirrored ? 466 - value - width : value }
+        let tabs = (0..<5).map { element("RadioButton", "Tab \($0)", x(396, 44), 394 + 50 * $0, 44, 58) }
+        let card = element("Link", "Overlapping card", x(300, 120), 410, 120, 40)
+        let outline = OutlineFormatter.render(tree: try tree((tabs + [card]).joined(separator: ","), width: 466, height: 678))
+        #expect(outline.sideKinds.isEmpty)
+    }
+
     @Test("content-pane bounds survive nested groups on either edge", arguments: [false, true])
     func nestedContentPane(mirrored: Bool) throws {
         func x(_ value: Int, _ width: Int) -> Int { mirrored ? 466 - value - width : value }
@@ -223,14 +268,16 @@ struct OutlineSideBarTests {
         #expect(outline.entries.allSatisfy { !["Leading", "Trailing"].contains($0.region.kind) })
     }
 
-    @Test("a sparse screen with no wide content is not a bar")
-    func noWideContent() throws {
+    @Test("a sparse back-button column does not require wide content")
+    func sparseBackButtonColumn() throws {
         let children = [
             element("Button", "Back", 16, 50, 44, 44, id: "BackButton"),
             element("Image", "Logo", 20, 300, 40, 40),
         ].joined(separator: ",")
         let outline = OutlineFormatter.render(tree: try tree(children))
-        #expect(outline.entries.allSatisfy { !["Leading", "Trailing"].contains($0.region.kind) })
+        #expect(outline.sideKinds == ["Leading"])
+        #expect(outline.regionKind(id: "BackButton") == "Leading")
+        #expect(outline.regionKind(label: "Logo") == "Leading")
     }
 
     @Test("a right-edge column without a back button or tabs is not a bar")
@@ -316,8 +363,8 @@ struct OutlineSideBarTests {
         #expect(outline.entries.allSatisfy { !["Leading", "Trailing"].contains($0.region.kind) })
     }
 
-    @Test("a back button above a leading avatar is not a bar when the wide content is only below (S4-004)")
-    func wideContentOnlyBelow() throws {
+    @Test("profile fields below a candidate column still block a bar (S4-004)")
+    func profileFieldsBelowColumn() throws {
         // A regular iPhone profile form: the avatar stacks under the back
         // button in the leading strip, and every wide field is below both.
         let children = [
