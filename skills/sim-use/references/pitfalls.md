@@ -92,14 +92,18 @@ This setting applies to iOS simulators. Preflight only prints guidance; it does 
 
 ## iOS: paste drops text
 
-**Symptom:** `sim-use paste 'text'` succeeds but the text field stays empty.
+**Symptom:** Paste errors, or a custom control does not show the expected text.
 
-**Why:** The default path sends HID Cmd+V, which requires Simulator's hardware keyboard to be connected (Simulator > I/O > Keyboard > Connect Hardware Keyboard). In soft-keyboard-only mode, HID Cmd+V is silently dropped.
+**Why:** The current implementation verifies clipboard staging and invokes native menu Paste, without requiring a connected hardware keyboard. A field must be focused and expose the edit menu; app-specific editing rules, paste prompts and concurrent clipboard writes still apply.
 
 **Recipes:**
-1. Check keyboard state: `sim-use keyboard-state`. If `soft`, use the menu path.
-2. Menu path: `sim-use paste 'text' --via-menu --target-id <field-id>` — long-presses the field and taps the iOS edit menu "Paste" button.
-3. If you control the simulator setup, enable hardware keyboard for all subsequent paste calls.
+1. Focus the field with `tap '#<id>'`, then `paste 'text'`. Use `--replace` to overwrite all content.
+2. For explicit targeting, use `paste 'text' --via-menu --target-id <field-id>` or `--target-x/--target-y`. A missing menu is an error, not a reported success.
+3. Inspect the UI for paste permission prompts; approve only with user authorization. Check the resulting field, not just the command exit status.
+4. A readback mismatch means the clipboard changed or staging failed. Stop other clipboard writers, including on another shared device, before retrying. Do not log unexpected clipboard contents or restore an old backup over newer external content.
+5. For controls that do not support native Paste, report the capability limit. Do not substitute US-keyboard `type` for arbitrary Unicode, change keyboard/sync settings, or fall back to overwriting the host clipboard.
+
+Simulator.app and Device Hub use different clipboard stacks. sim-use permits verified legacy staging only while the guest's CoreDevice ownership signal is inactive; otherwise it uses verified CoreDevice. Do not revive the old raw `simctl pbcopy` + Cmd+V workaround.
 
 ## iOS: U+FFFC icon placeholder
 

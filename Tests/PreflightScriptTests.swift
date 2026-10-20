@@ -25,7 +25,8 @@ struct PreflightScriptTests {
     // `ios rotate`, and relies on the secondary-display refusals and the
     // `display` tag that release introduces (docs/ai/010-display-routing);
     // a 0.15.0 CLI has no such verbs and would tap the dark main display of
-    // an unfolded iPhone Duo with a false success.
+    // an unfolded iPhone Duo with a false success. Restored verified paste
+    // also ships in the unreleased 0.16.0; it needs no higher floor.
     @Test("version compatibility follows release normalization", arguments: [
         (stamp: "0.16.0", versionExitCode: 0, expectedPass: true),
         (stamp: "0.17.0", versionExitCode: 0, expectedPass: true),

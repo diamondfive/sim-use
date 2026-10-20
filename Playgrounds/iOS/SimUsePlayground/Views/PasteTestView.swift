@@ -11,6 +11,8 @@ import SwiftUI
 // MARK: - Paste Test View
 struct PasteTestView: View {
     @State private var inputText = ""
+    @State private var multiline = false
+    @State private var decoyTapCount = 0
     @FocusState private var isTextFieldFocused: Bool
 
     var body: some View {
@@ -31,8 +33,16 @@ struct PasteTestView: View {
             .shadow(radius: 4)
 
             VStack(spacing: 16) {
-                TextField("Paste target...", text: $inputText)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                Group {
+                    if multiline {
+                        TextEditor(text: $inputText)
+                            .frame(height: 90)
+                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(.secondary))
+                    } else {
+                        TextField("Paste target...", text: $inputText)
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                    }
+                }
                     .font(.title2)
                     .focused($isTextFieldFocused)
                     .autocorrectionDisabled()
@@ -46,6 +56,7 @@ struct PasteTestView: View {
                         .accessibilityIdentifier("paste-char-count")
                         .accessibilityValue("\(inputText.count)")
                     Text("Content: \(inputText)")
+                        .lineLimit(2)
                         .accessibilityIdentifier("paste-content-echo")
                         .accessibilityValue(inputText.isEmpty ? "empty" : inputText)
                 }
@@ -67,6 +78,23 @@ struct PasteTestView: View {
         .padding()
         .navigationTitle("Paste Test")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            // A same-label app control must not be mistaken for an edit menu.
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Paste") {
+                    isTextFieldFocused = false
+                    decoyTapCount += 1
+                }
+                .accessibilityIdentifier("paste-decoy-button")
+                .accessibilityValue("\(decoyTapCount)")
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(multiline ? "Single line" : "Multiline") {
+                    multiline.toggle()
+                }
+                .accessibilityIdentifier("paste-multiline-toggle")
+            }
+        }
         // No screen-level accessibilityIdentifier: applied to the root it
         // propagates down and overrides every child's own id, which the
         // per-element E2E selectors (paste-input-field, paste-content-echo,

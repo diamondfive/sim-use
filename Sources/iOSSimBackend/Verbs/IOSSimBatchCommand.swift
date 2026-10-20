@@ -41,8 +41,9 @@ public struct IOSSimBatchCommand: SimUseExecutableCommand {
           sleep <seconds>
 
         Notes on `paste` inside batch:
-          * Default Cmd+V path only — `--via-menu` is not supported as a
-            batch step. Run `sim-use paste --via-menu` standalone instead.
+          * Uses the standalone verified clipboard and native menu path.
+            Default, --replace and targeted --via-menu forms are supported.
+            Focus the field first, or supply a --via-menu target.
           * `--stdin` is rejected. Pass text inline (`paste 'hello'`) or
             via `--file <path>`.
 

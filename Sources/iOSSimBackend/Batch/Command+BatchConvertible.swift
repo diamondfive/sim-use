@@ -296,13 +296,6 @@ extension IOSSimKeyComboCommand: BatchConvertible {
 
 extension IOSSimPasteCommand: BatchConvertible {
     public func toBatchPrimitives(context: BatchContext, logger: SimUseLogger) async throws -> [BatchPrimitive] {
-        // `--via-menu` requires runtime AX-tree polling for the iOS edit
-        // menu and a tap on a label-resolved target. That's well outside
-        // the deterministic HID-stream model batch is built around;
-        // surface it explicitly instead of half-implementing it.
-        guard !viaMenu else {
-            throw ValidationError("`paste --via-menu` is not supported as a batch step yet. Run `sim-use paste --via-menu` as a standalone command.")
-        }
         // `--stdin` is meaningless inside a batch because each step is
         // already one parsed line; reject early so the daemon-side
         // bypass logic on `Batch` doesn't have to special-case it.
@@ -327,36 +320,14 @@ extension IOSSimPasteCommand: BatchConvertible {
             throw ValidationError("`paste` step text is empty; nothing to paste.")
         }
 
-        let udid = context.simulatorUDID
-        let shouldReplace = replace
-
-        let pbcopyAction = BatchHostAction(label: "simctl pbcopy (\(inputText.utf8.count) bytes)") { _, _ in
-            try IOSSimPasteCommand.writeSimulatorPasteboard(text: inputText, udid: udid)
+        var template = self
+        template.text = inputText
+        template.inputFile = nil
+        template.device.resolved = context.simulatorUDID
+        let action = BatchHostAction(label: "paste (\(inputText.utf8.count) bytes)") { session, _ in
+            _ = try await template.execute(in: session)
         }
-
-        var primitives: [BatchPrimitive] = [.hostAction(pbcopyAction)]
-
-        if shouldReplace {
-            primitives.append(.hidBarrier(modifierCombo(
-                key: PasteHIDKeycode.a,
-                modifier: PasteHIDKeycode.leftGUI
-            )))
-        }
-
-        primitives.append(.hidBarrier(modifierCombo(
-            key: PasteHIDKeycode.v,
-            modifier: PasteHIDKeycode.leftGUI
-        )))
-
-        return primitives
-    }
-
-    private func modifierCombo(key: UInt32, modifier: UInt32) -> FBSimulatorHIDEvent {
-        FBSimulatorHIDEvent.composite([
-            FBSimulatorHIDEvent.keyboard(direction: .down, keyCode: modifier),
-            FBSimulatorHIDEvent.shortKeyPress(key),
-            FBSimulatorHIDEvent.keyboard(direction: .up, keyCode: modifier),
-        ])
+        return [.hostAction(action)]
     }
 }
 

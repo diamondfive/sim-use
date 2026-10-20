@@ -39,7 +39,7 @@ public struct BatchStepParser {
 
         let stepArguments = Array(tokens.dropFirst())
         try ensureNoPerStepUDID(stepArguments)
-        let arguments = stepArguments + ["--udid", globalUDID]
+        let arguments = DaemonInlineInput.insertingOptions(["--udid", globalUDID], into: stepArguments)
 
         // Parse each step directly into its IOSSim<Verb>Command. The
         // batch subsystem lives entirely in iOSSimBackend, so SimUse
@@ -84,8 +84,9 @@ public struct BatchStepParser {
     }
 
     private static func ensureNoPerStepUDID(_ args: [String]) throws {
-        if args.contains(where: { $0 == "--udid" || $0.hasPrefix("--udid=") }) {
-            throw ValidationError("Per-step --udid is not supported in batch steps. Use batch-level --udid.")
+        let options = args.prefix { $0 != "--" }
+        if options.contains(where: { $0 == "--udid" || $0.hasPrefix("--udid=") || $0 == "--device" || $0.hasPrefix("--device=") }) {
+            throw ValidationError("Per-step --device/--udid is not supported in batch steps. Use the batch-level target.")
         }
     }
 
