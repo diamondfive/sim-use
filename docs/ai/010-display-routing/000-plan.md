@@ -1,5 +1,8 @@
 # 010 — Display routing (iPhone Duo, Resize Mode) and device rotation: Plan
 
+> Updated 2026-10-20: Duo display labels in default text use validated
+> inner/cover aliases; raw JSON names stay unchanged. See [003-readable-display-names.md](003-readable-display-names.md).
+
 | | |
 | --- | --- |
 | **Status** | Implemented in the stack #157, #158, #161, #163, #164, #165 (awaiting merge) |
@@ -434,3 +437,4 @@ Result: works (E48–E52). dtuhidd can be started on demand; Indigo cannot route
 
 ## Amendments
 - Updated 2026-10-17: all six slices done; action log in [001-action.md](001-action.md)
+- Updated 2026-10-20: readable Duo display names — see [003-readable-display-names.md](003-readable-display-names.md).

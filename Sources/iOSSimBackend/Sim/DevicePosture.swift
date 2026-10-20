@@ -15,14 +15,49 @@ public struct PostureReport: Codable, Equatable, Sendable {
         /// sim-use interface orientation (`DisplayOrientation` raw value).
         public let orientation: String
         public let backlight: String?
+        /// Internal text context survives the daemon hop but is never
+        /// included in public JSON.
+        let displayLabel: String?
 
-        init(_ display: SimulatorDisplay) {
+        var textName: String { displayLabel ?? "display \(name)" }
+
+        init(_ display: SimulatorDisplay, displayLabel: String? = nil) {
             name = display.name
             id = Int(display.displayID)
             primary = display.isPrimary
             rotation = display.rotation.rawValue
             orientation = display.rotation.interfaceOrientation.rawValue
             backlight = display.backlightState
+            self.displayLabel = displayLabel
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case name, id, primary, rotation, orientation, backlight
+            case displayLabel = "_displayLabel"
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            name = try container.decode(String.self, forKey: .name)
+            id = try container.decode(Int.self, forKey: .id)
+            primary = try container.decode(Bool.self, forKey: .primary)
+            rotation = try container.decode(String.self, forKey: .rotation)
+            orientation = try container.decode(String.self, forKey: .orientation)
+            backlight = try container.decodeIfPresent(String.self, forKey: .backlight)
+            displayLabel = try container.decodeIfPresent(String.self, forKey: .displayLabel)
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(name, forKey: .name)
+            try container.encode(id, forKey: .id)
+            try container.encode(primary, forKey: .primary)
+            try container.encode(rotation, forKey: .rotation)
+            try container.encode(orientation, forKey: .orientation)
+            try container.encodeIfPresent(backlight, forKey: .backlight)
+            if encoder.userInfo[.simUseDaemonResponse] as? Bool == true {
+                try container.encodeIfPresent(displayLabel, forKey: .displayLabel)
+            }
         }
     }
 
@@ -39,8 +74,11 @@ public struct PostureReport: Codable, Equatable, Sendable {
     public let deviceOrientation: String?
     public let resizableSession: Session?
 
-    public init(topology: SimulatorDisplayTopology, session: ResizableAppSession?) {
-        activeDisplay = (topology.activeIntegrated ?? topology.primary).map(Display.init)
+    public init(topology: SimulatorDisplayTopology, session: ResizableAppSession?, deviceTypeIdentifier: String? = nil) {
+        let names = SimulatorDisplayNames(deviceTypeIdentifier: deviceTypeIdentifier, topology: topology)
+        activeDisplay = (topology.activeIntegrated ?? topology.primary).map {
+            Display($0, displayLabel: $0.isActive ? names.label(for: $0) : nil)
+        }
         integratedDisplays = topology.integratedDisplays
             .sorted { $0.isPrimary && !$1.isPrimary }
             .map(\.name)
@@ -51,15 +89,18 @@ public struct PostureReport: Codable, Equatable, Sendable {
     /// One line for the text output.
     public var summary: String {
         var parts: [String] = []
-        if let display = activeDisplay {
+        if let display = activeDisplay, let label = display.displayLabel {
+            parts.append("\(label) active")
+            parts.append(display.orientation)
+        } else if let display = activeDisplay {
             parts.append("active display \(display.name) (id \(display.id)\(display.primary ? ", primary" : "")), \(display.orientation)")
         } else {
             parts.append("no active integrated display")
         }
-        if integratedDisplays.count > 1 {
+        if activeDisplay?.displayLabel == nil, integratedDisplays.count > 1 {
             parts.append("integrated displays: \(integratedDisplays.joined(separator: ", "))")
         }
-        if let deviceOrientation {
+        if activeDisplay?.displayLabel == nil, let deviceOrientation {
             parts.append("device orientation \(deviceOrientation)")
         }
         if let session = resizableSession {

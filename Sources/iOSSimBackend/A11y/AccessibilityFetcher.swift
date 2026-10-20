@@ -40,6 +40,8 @@ public struct AccessibilityFetcher {
         /// recovery were skipped because the hit-test resolves on the main
         /// display.
         public let routing: RoutingDisplay
+        /// Presentation-only header tag; structured display fields keep raw names.
+        public let displayTag: String?
 
         /// The active Resize Mode session, when `routing` is one.
         public var resizableSession: ResizableAppSession? {
@@ -51,12 +53,14 @@ public struct AccessibilityFetcher {
             data: Data,
             calibration: OrientationCalibration?,
             advisory: CommandAdvisory? = nil,
-            routing: RoutingDisplay = .main
+            routing: RoutingDisplay = .main,
+            displayTag: String? = nil
         ) {
             self.data = data
             self.calibration = calibration
             self.advisory = advisory
             self.routing = routing
+            self.displayTag = displayTag ?? routing.headerTag
         }
     }
 
@@ -152,6 +156,12 @@ public struct AccessibilityFetcher {
             rootSize: rootFrame.map { SimulatorDisplayTopologyMonitor.RootSize(width: Double($0.width), height: Double($0.height)) }
         )
         perf.stage("routing display check")
+        var displayTag = routing.headerTag
+        let deviceTypeIdentifier = target.device.deviceTypeIdentifier
+        if deviceTypeIdentifier == SimulatorDisplayNames.duoDeviceTypeIdentifier {
+            let topology = await SimulatorDisplayTopologyMonitor.shared.state(for: simulatorUDID).topology
+            displayTag = SimulatorDisplayNames(deviceTypeIdentifier: deviceTypeIdentifier, topology: topology).headerTag(for: routing)
+        }
         let probe = makeProbe(displayId: routing.accessibilityDisplayID)
         let fixedCalibration = routing.fixedCalibration(sceneSize: rootFrame?.size)
         switch routing {
@@ -219,7 +229,7 @@ public struct AccessibilityFetcher {
             perf.stage("point XPC (routed)")
             let data = try serializeAccessibilityInfo(hit)
             perf.finish()
-            return FetchResult(data: data, calibration: calibration, routing: routing)
+            return FetchResult(data: data, calibration: calibration, routing: routing, displayTag: displayTag)
         }
 
         // AX frames are UI-space while the hit-test consumes points on
@@ -244,7 +254,7 @@ public struct AccessibilityFetcher {
         let data = try serializeAccessibilityInfo(recovered)
         perf.stage("serialize")
         perf.finish()
-        return FetchResult(data: data, calibration: calibration, advisory: remoteAdvisory, routing: routing)
+        return FetchResult(data: data, calibration: calibration, advisory: remoteAdvisory, routing: routing, displayTag: displayTag)
     }
 
     /// Whether a fetched tree payload is an "empty shell" warranting the
