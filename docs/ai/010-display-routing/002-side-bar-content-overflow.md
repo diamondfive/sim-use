@@ -1,5 +1,7 @@
 # 010.002 — Side-bar detection with overflowing content frames
 
+> Updated 2026-10-20: [004-remove-wide-content-gate.md](004-remove-wide-content-gate.md) removes the adjacent wide-content requirement retained here. The full-height content-pane rule is unchanged.
+
 ## Context
 
 On 2026-10-20, the local 0.16.0 build on main `88a4c23` did not put the
