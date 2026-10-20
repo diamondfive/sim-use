@@ -282,8 +282,97 @@ struct RoutingDisplayGuardTests {
             Issue.record("expected SecondaryDisplayCaptureError")
         } catch let error as SecondaryDisplayCaptureError {
             #expect(error.localizedDescription.contains("Nothing was captured."))
-            #expect(error.hint?.contains("--display=37AFD618-C3EB-415F-AC4B-ABA9E4D465CF") == true)
+            #expect(error.hint?.contains("`record-video`") == true)
         }
+    }
+
+    @Test("video capture reads the display that hosts the app (S5)")
+    func captureSource() async throws {
+        let open = SimulatorDisplayTopologyState.available(try topology("duo-open"))
+        let source = try await RoutingDisplayGuard.captureSource(
+            udid: "U", verb: "record-video", logger: quietLogger,
+            sessionMonitor: sessionMonitor(.inactive), topologyMonitor: topologyMonitor(open)
+        )
+        #expect(source?.displayName == "LCD-1")
+        #expect(source?.pixelWidth == 2007 && source?.pixelHeight == 2853)
+        for name in ["duo-folded", "iphone17"] {
+            #expect(try await RoutingDisplayGuard.captureSource(
+                udid: "U", verb: "record-video", logger: quietLogger,
+                sessionMonitor: sessionMonitor(.inactive), topologyMonitor: topologyMonitor(.available(try topology(name)))
+            ) == nil)
+        }
+    }
+
+    @Test("the end-of-capture check reads fresh state, not the cache (S5-003)")
+    func captureMovedNoticeIsFresh() async throws {
+        final class Box: @unchecked Sendable {
+            private let lock = NSLock()
+            private var value: ResizableAppSessionState
+            init(_ value: ResizableAppSessionState) { self.value = value }
+            var state: ResizableAppSessionState {
+                get { lock.lock(); defer { lock.unlock() }; return value }
+                set { lock.lock(); value = newValue; lock.unlock() }
+            }
+        }
+        let canvas = try #require(try topology("iphone17").displays.first { $0.name == "Resizable" })
+        let tall = ResizableAppSession(displayUniqueID: canvas.uniqueID, displayName: "Resizable", preferredWidth: 560, preferredHeight: 874)
+        let short = ResizableAppSession(displayUniqueID: canvas.uniqueID, displayName: "Resizable", preferredWidth: 560, preferredHeight: 667)
+        let box = Box(.active(tall))
+        let sessions = ResizableAppSessionMonitor(probe: { _ in box.state }, environment: [:])
+        let topologies = topologyMonitor(.available(try topology("iphone17")))
+        // Prime the caches the way the capture start does.
+        let started = try await RoutingDisplayGuard.captureSource(
+            udid: "U", verb: "record-video", logger: quietLogger, sessionMonitor: sessionMonitor(.inactive), topologyMonitor: topologies
+        )
+        #expect(started == nil)
+        let primed = try await RoutingDisplayGuard.captureSource(
+            udid: "U", verb: "record-video", logger: quietLogger, sessionMonitor: sessions, topologyMonitor: topologies
+        )
+        // The session is resized well inside the 5 s cache window.
+        box.state = .active(short)
+        let notice = await RoutingDisplayGuard.captureMovedNotice(
+            udid: "U", verb: "record-video", started: primed, sessionMonitor: sessions, topologyMonitor: topologies
+        )
+        #expect(notice?.contains("was resized") == true, "\(String(describing: notice))")
+    }
+
+    @Test("a capture whose app moved to another display ends with a notice (S5)")
+    func captureMovedNotice() async throws {
+        let open = SimulatorDisplayTopologyState.available(try topology("duo-open"))
+        let folded = SimulatorDisplayTopologyState.available(try topology("duo-folded"))
+        let innerDisplay = try #require(try topology("duo-open").activeIntegrated)
+        let inner = try #require(try RoutingDisplay.secondary(innerDisplay).captureSource())
+        // Started on the inner display, folded since.
+        let notice = await RoutingDisplayGuard.captureMovedNotice(
+            udid: "U", verb: "record-video", started: inner,
+            sessionMonitor: sessionMonitor(.inactive), topologyMonitor: topologyMonitor(folded)
+        )
+        #expect(notice?.contains("moved to the main display") == true)
+        #expect(notice?.contains("display 'LCD-1' only") == true)
+        // Started folded, unfolded since.
+        let unfolded = await RoutingDisplayGuard.captureMovedNotice(
+            udid: "U", verb: "stream-video", started: nil,
+            sessionMonitor: sessionMonitor(.inactive), topologyMonitor: topologyMonitor(open)
+        )
+        #expect(unfolded?.contains("moved to display 'LCD-1'") == true)
+        // A Resize Mode session resized meanwhile: same display, new scene.
+        let canvas = try #require(try topology("iphone17").displays.first { $0.name == "Resizable" })
+        let small = try #require(try RoutingDisplay.resizable(
+            ResizableAppSession(displayUniqueID: canvas.uniqueID, displayName: "Resizable", preferredWidth: 560, preferredHeight: 874), canvas
+        ).captureSource())
+        let resized = ResizableAppSession(displayUniqueID: canvas.uniqueID, displayName: "Resizable", preferredWidth: 560, preferredHeight: 667)
+        let resizeNotice = await RoutingDisplayGuard.captureMovedNotice(
+            udid: "U", verb: "record-video", started: small,
+            sessionMonitor: sessionMonitor(.active(resized)),
+            topologyMonitor: topologyMonitor(.available(try topology("iphone17")))
+        )
+        #expect(resizeNotice?.contains("was resized") == true, "\(String(describing: resizeNotice))")
+        #expect(resizeNotice?.contains("1680x2622") == true)
+        // Still where it started.
+        #expect(await RoutingDisplayGuard.captureMovedNotice(
+            udid: "U", verb: "record-video", started: inner,
+            sessionMonitor: sessionMonitor(.inactive), topologyMonitor: topologyMonitor(open)
+        ) == nil)
     }
 
     @Test("folded Duo and a single-display iPhone proceed")
@@ -388,6 +477,29 @@ struct FoldTargetTests {
         #expect(!FoldExpectation.secondaryActive.isMet(by: folded))
     }
 
+    @Test("a hinge report had no effect when the same display stays active and the expectation is unmet")
+    func hingeNoEffect() throws {
+        let folded = try topology("duo-folded")
+        let open = try topology("duo-open")
+        #expect(FoldExpectation.secondaryActive.reportHadNoEffect(before: folded, after: folded))
+        #expect(!FoldExpectation.secondaryActive.reportHadNoEffect(before: folded, after: open))
+        #expect(FoldExpectation.primaryActive.reportHadNoEffect(before: open, after: open))
+        // In flight: no display active yet is a change.
+        let switching = SimulatorDisplayTopology(
+            displays: open.displays.map { display in
+                SimulatorDisplay(
+                    displayID: display.displayID, uniqueID: display.uniqueID, name: display.name, kind: display.kind,
+                    isPrimary: display.isPrimary, isActive: false, backlightState: display.backlightState,
+                    rotation: display.rotation, pixelWidth: display.pixelWidth, pixelHeight: display.pixelHeight, pointScale: display.pointScale
+                )
+            },
+            deviceOrientation: open.deviceOrientation
+        )
+        #expect(!FoldExpectation.primaryActive.reportHadNoEffect(before: open, after: switching))
+        // An intermediate angle has no expectation to miss.
+        #expect(!FoldExpectation.observeOnly.reportHadNoEffect(before: open, after: open))
+    }
+
     @Test("the posture summary names the active display and the other integrated displays")
     func postureSummary() throws {
         let report = PostureReport(topology: try topology("duo-open"), session: nil)
@@ -440,6 +552,62 @@ struct RotationPlannerTests {
     func unlearnable() {
         #expect(RotationPlanner.learnedTransportOffset(sent: .portrait, reported: "faceUp") == nil)
         #expect(RotationPlanner.learnedTransportOffset(sent: .portrait, reported: "unknown") == nil)
+    }
+
+    /// `duo-open` with the device orientation and the active display's
+    /// rotation replaced: a read-back at another moment of a rotation.
+    private func reading(device: String, active rotation: SimulatorDisplayRotation) throws -> SimulatorDisplayTopology {
+        let open = try topology("duo-open")
+        return SimulatorDisplayTopology(
+            displays: open.displays.map { display in
+                guard display.isActive, display.kind == .integrated else { return display }
+                return SimulatorDisplay(
+                    displayID: display.displayID, uniqueID: display.uniqueID, name: display.name, kind: display.kind,
+                    isPrimary: display.isPrimary, isActive: display.isActive, backlightState: display.backlightState,
+                    rotation: rotation, pixelWidth: display.pixelWidth, pixelHeight: display.pixelHeight, pointScale: display.pointScale
+                )
+            },
+            deviceOrientation: device
+        )
+    }
+
+    @Test("a read-back settles at once only when both the device and the interface reached the target")
+    func settlesOnTarget() throws {
+        // Unfolded Duo, landscape-left → portrait: the device must report
+        // portrait and the inner display rot0.
+        let done = try reading(device: "portrait", active: .rot0)
+        #expect(RotationPlanner.readBackSettled(previous: done, current: done, wanted: .portrait, target: .portrait, elapsed: 0.3, grace: 1.5))
+        #expect(!RotationPlanner.readBackSettled(previous: nil, current: done, wanted: .portrait, target: .portrait, elapsed: 0.3, grace: 1.5))
+        let moving = try reading(device: "portrait", active: .rot90)
+        #expect(!RotationPlanner.readBackSettled(previous: moving, current: done, wanted: .portrait, target: .portrait, elapsed: 3, grace: 1.5))
+    }
+
+    /// Plan open question 18: the device turned, the interface not yet.
+    @Test("a device that turned while the interface did not is not an answer before the grace")
+    func interfaceLagWaits() throws {
+        let lagging = try reading(device: "portrait", active: .rot90)
+        #expect(!RotationPlanner.readBackSettled(previous: lagging, current: lagging, wanted: .portrait, target: .portrait, elapsed: 0.6, grace: 1.5))
+        #expect(RotationPlanner.readBackSettled(previous: lagging, current: lagging, wanted: .portrait, target: .portrait, elapsed: 1.6, grace: 1.5))
+    }
+
+    @Test("an unchanged read-back is the answer only after the grace")
+    func unchangedWaits() throws {
+        let unchanged = try topology("duo-open")
+        #expect(!RotationPlanner.readBackSettled(previous: unchanged, current: unchanged, wanted: .portrait, target: .portrait, elapsed: 0.6, grace: 1.5))
+        #expect(RotationPlanner.readBackSettled(previous: unchanged, current: unchanged, wanted: .portrait, target: .portrait, elapsed: 1.6, grace: 1.5))
+    }
+
+    /// A lost orientation report and a refused one read back the same:
+    /// nothing moved. Both justify one more send.
+    @Test("a report had no effect when neither the device nor the active display moved")
+    func noEffect() throws {
+        let before = try topology("duo-open")
+        #expect(RotationPlanner.reportHadNoEffect(before: before, after: before, target: .portrait))
+        #expect(!RotationPlanner.reportHadNoEffect(before: before, after: try reading(device: "portrait", active: .rot90), target: .portrait))
+        #expect(!RotationPlanner.reportHadNoEffect(before: before, after: try reading(device: "landscapeRight", active: .rot0), target: .portrait))
+        // Already at the target: nothing to resend.
+        #expect(!RotationPlanner.reportHadNoEffect(before: before, after: before, target: .landscapeLeft))
+        #expect(!RotationPlanner.reportHadNoEffect(before: nil, after: before, target: .portrait))
     }
 
     @Test("Purple numbers landscape in interface style, so device left and right swap")
