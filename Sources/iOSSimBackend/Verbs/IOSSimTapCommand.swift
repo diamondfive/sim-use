@@ -177,7 +177,7 @@ public struct IOSSimTapCommand: SimUseExecutableCommand {
         // Resizable app session (issue #143): touch HID cannot reach the
         // app, so refuse before resolving a target rather than report a
         // tap that was never delivered. `long-press` shares this path.
-        try await ResizableAppSessionGuard.assertTouchInputReachesApp(
+        try await RoutingDisplayGuard.assertTouchInputReachesApp(
             udid: device.resolved,
             verb: (duration ?? 0) > 0 ? "long-press" : "tap",
             logger: logger
@@ -186,11 +186,10 @@ public struct IOSSimTapCommand: SimUseExecutableCommand {
         let resolvedPoint: (x: Double, y: Double)
         let resolvedDescription: String
         let resolvedAdvisory: CommandAdvisory?
-        // Non-nil for AX-derived targets: their coordinates are UI space
-        // and must be transformed into framebuffer space before HID
-        // dispatch (issue #34). Explicit -x/-y stays raw by default
-        // (native space); `--coordinate-space ui` opts it into the same
-        // calibration (issue #142).
+        // Non-nil for UI-space targets: their coordinates must be
+        // transformed into framebuffer space before HID dispatch (issue
+        // #34). Selectors and aliases are always UI space; explicit -x/-y
+        // are too unless `--coordinate-space native` opts out.
         let calibration: OrientationCalibration?
 
         if let alias {
@@ -248,10 +247,10 @@ public struct IOSSimTapCommand: SimUseExecutableCommand {
         } else if let explicit = try TapCoordinateResolver.resolve(x: targeting.pointX, y: targeting.pointY, point: targeting.point) {
             resolvedPoint = (x: explicit.x, y: explicit.y)
             resolvedDescription = "(\(explicit.x), \(explicit.y))"
-            if targeting.coordinateSpace == .ui {
+            if targeting.effectiveCoordinateSpace == .ui {
                 let uiCalibration = await UISpaceCalibrationLoader.load(
                     udid: device.resolved,
-                    fallbackMessage: "Screen orientation could not be determined; --coordinate-space ui coordinates were dispatched as device-native portrait and may be wrong if the device is rotated.",
+                    fallbackMessage: UISpaceCalibrationLoader.explicitCoordinatesFallback,
                     logger: logger
                 )
                 resolvedAdvisory = uiCalibration.advisory
@@ -305,7 +304,7 @@ public struct IOSSimTapCommand: SimUseExecutableCommand {
         // inside the cache window is known by now. Cache hit otherwise —
         // effectively free. Raw -x/-y fetched nothing and relies on the
         // first check alone.
-        try await ResizableAppSessionGuard.assertTouchInputReachesApp(
+        try await RoutingDisplayGuard.assertTouchInputReachesApp(
             udid: device.resolved,
             verb: (duration ?? 0) > 0 ? "long-press" : "tap",
             logger: logger

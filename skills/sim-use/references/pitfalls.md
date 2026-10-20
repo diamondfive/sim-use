@@ -30,23 +30,35 @@ Detailed solutions for common sim-use issues. The symptom index in SKILL.md poin
 
 **Recipes:**
 1. Normally nothing to do — selectors work in any orientation, and outline/tap coordinates always read in UI space (what you see).
-2. The calibration-fallback advisory means the mapping could not be verified (empty or symmetric screen) and portrait was assumed; re-run `ui` and retry, or use explicit `-x/-y`/`--point`.
+2. The calibration-fallback advisory means the mapping could not be verified (empty or symmetric screen) and portrait was assumed; re-run `ui` and retry, or pass `-x/-y` with `--coordinate-space native` (device-native portrait points).
 3. A "snapshot was captured at WxH…" advisory means the device rotated after the last `ui`; re-run `ui` to refresh the `@N` table.
-4. Explicit `-x/-y`/`--point` (and `--target-x/y`) are never transformed — they are device-native portrait coordinates by contract.
+4. Explicit `-x/-y`/`--point`, `swipe`/`touch`/`multi-touch` coordinates and the pinch/rotate centre take outline (UI-space) numbers and go through the same calibration. `--coordinate-space native` turns it off: the numbers are then device-native portrait points.
 5. `batch` calibrates once per run. If a step rotates the device (or navigates to a screen that forces a different orientation), later selector steps may mis-target — split the flow into separate batches around the rotation.
 
 ## iOS: Resize Mode (resizable app session)
 
-**Symptom:** `tap`, `long-press`, `swipe`, `touch`, `gesture`, `multi-touch`, `paste --via-menu`, a `batch` with a touch step, `record-video` or `stream-video` fails with `A resizable app session (Xcode 27 Resize Mode) is active on simulator …` (`--json`: `ok: false` with a `hint`). `ui` prints `[i] A resizable app session … is active` (`--json`: `advisory.kind: resizable_app_session`) and its `App:` header shows a size that is not a real device size (`560x874`, `375x667`, `874x402` on an upright iPhone 17). `screenshot` prints `[i] Captured the 'Resizable' display …`.
+**Symptom:** The `ui` header ends in `display Resizable 560x874` (`--json`: a `data.display` object with `kind: virtual` and `resizableSession`), its size is not a real device size, and `screenshot` prints `[i] Captured the 'Resizable' display …`.
 
-**Why:** Xcode 27 can move the frontmost app of an iOS 27+ simulator onto a virtual display named `Resizable` and give it any size (Device Hub's resize button, or `xcrun devicectl device appResize start`). The main display then shows only the wallpaper, with SpringBoard frontmost. Simulator touch input, the main framebuffer and the accessibility point hit-test are all bound to the main display, so a tap would be reported as delivered and reach nothing — which is why sim-use refuses it. Keyboard input is device-wide and does reach the app. Issue: https://github.com/lycorp-jp/sim-use/issues/143.
+**Why:** Xcode 27 can move the frontmost app of an iOS 27+ simulator onto a virtual display named `Resizable` and give it any size (Device Hub's resize button, or `xcrun devicectl device appResize start`). sim-use detects the session and routes touch input, hit-tests, screenshots and video to that display. Issue: https://github.com/lycorp-jp/sim-use/issues/143.
 
 **Recipes:**
-1. Observe freely: `ui` is the app's own tree at the resized size (hit-test recovery and orientation calibration are skipped, so collapsed groups stay collapsed), and `screenshot` is redirected to the `Resizable` display. `record-video` and `stream-video` are refused — they can only capture the main display; record the app with `xcrun simctl io <udid> recordVideo --display=<uuid> <file.mov>` (the error's hint fills in the uuid). The `App:` header is the only place the scene's *actual* size shows — `appResize set` reports the size it asked for, which the scene may snap away from.
-2. Drive with the keyboard: `type`, Cmd+V `paste`, `key`, `key-combo`, `key-sequence` and keyboard-only `batch` runs work during a session. `paste --via-menu` is a long-press plus menu taps and is refused like a tap. Focus the field *before* starting the session, since focusing needs a tap.
-3. To tap, end the session: stop the `devicectl device appResize start` process (or rotate the device — rotation ends a session), re-run `ui`, then tap. The app returns to the device's native size.
-4. Never use `--point`/`-x -y` as a workaround — raw coordinates are refused like selectors, and `ui --point` describes SpringBoard, not the app.
-5. The check costs one `devicectl` query per device per 5 s. A session that just *started* is noticed by the next `ui`, selector tap, or touch step of a `batch` (a newly resized root frame bypasses the cache; a `batch` re-checks before every touch step) unless the scene is exactly the device's own size; a session that just *ended*, and standalone raw `-x/-y` taps right after a start, can see the previous answer for up to 5 s. `SIM_USE_RESIZE_SESSION_CHECK=0` disables the check (you are then back to silent no-op taps); the per-device daemon reads it at spawn time, so set it on the first command or pair it with `SIM_USE_NO_DAEMON=1`. This recipe needs sim-use 0.15.0 or newer — the preflight enforces it.
+1. Work as usual: `ui`, selectors, `@N`, `tap`, `swipe`, `gesture`, `type` and `screenshot` all act on the resized app. The `App:` header is the only place the scene's *actual* size shows — `appResize set` reports the size it asked for, which the scene may snap away from.
+2. Explicit `-x/-y` are scene points (the scene is never rotated).
+3. `record-video` and `stream-video --format h264|bgra` capture the scene (its size at the display scale, cut from the canvas). The screenshot-based `stream-video` formats (`mjpeg`, `raw`, `ffmpeg`) read the main display only and refuse.
+4. The check costs one `devicectl` query per device per 5 s. A `ui` or selector tap whose root changed size re-reads it at once, so a session that just started or ended is noticed by the next `ui`. A raw `-x/-y` tap with no `ui` in between can see the previous answer for up to 5 s. `SIM_USE_RESIZE_SESSION_CHECK=0` disables the check; the per-device daemon reads it at spawn time.
+
+## iOS: iPhone Duo (multi-display simulator)
+
+**Symptom:** The `ui` header ends in `display LCD-1` (for example `App: Settings  951x669  (landscape-left, display LCD-1)`; `--json`: a `data.display` object).
+
+**Why:** The iPhone Duo simulator (Xcode 27.1) has two integrated displays. Folded, the app is on the cover display, the main one. Unfolded, it is on the inner display (`LCD-1`). sim-use routes touch input, hit-tests, screenshots and video to the display that hosts the app and takes its orientation from CoreDevice.
+
+**Recipes:**
+1. Check the posture: `sim-use ios fold --device <UDID>` names the active display and its orientation.
+2. Fold and unfold with `sim-use ios fold closed|open --device <UDID>`; rotate with `sim-use ios rotate <orientation>` (interface names, as the `ui` header prints them). Both clear the `ui` snapshot — re-run `ui` before `tap @N`.
+3. An iOS 27.1 SDK app puts its back button, trailing toolbar items, tab bar and status bar in a **vertical bar** on the cover display (and on the inner display in landscape). The outline lists it last, as `[Trailing  x>=N]` — `[Leading  x<=N]` when the cover is in landscape-right; its `@N` aliases tap as usual. The back button there has **no label**: tap it with `#BackButton`, not by the previous screen's title.
+4. Explicit `-x/-y` take the numbers `ui` prints on either display; `--coordinate-space native` means the inner panel's unrotated points.
+5. `record-video` and `stream-video --format h264|bgra` capture the inner display in its native portrait orientation (2008x2854), like the main display. A fold during a recording keeps the display the recording started on and prints `[i] The app moved to … while \`record-video\` ran` at the end — start a new recording after a fold.
 
 ## System layer detection
 

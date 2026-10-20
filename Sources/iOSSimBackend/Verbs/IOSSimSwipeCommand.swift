@@ -36,8 +36,8 @@ public struct IOSSimSwipeCommand: SimUseExecutableCommand {
 
     @OptionGroup public var coordinates: SwipeCoordinateOptions
 
-    @Option(name: .customLong("coordinate-space"), help: "Space the coordinates are given in: 'native' (device-native portrait, the default and historical contract) or 'ui' (visual space as printed by describe-ui; orientation-calibrated per command so outline coordinates stay correct on a rotated device).")
-    public var coordinateSpace: CoordinateSpace = .native
+    @Option(name: .customLong("coordinate-space"), help: "Space the coordinates are given in: 'ui' (the default; visual space as printed by describe-ui, orientation-calibrated per command so outline coordinates stay correct on a rotated device) or 'native' (the device's native portrait points, no calibration).")
+    public var coordinateSpace: CoordinateSpace = .ui
 
     @Option(name: .customLong("duration"), help: "Duration of the swipe in seconds.")
     public var duration: Double?
@@ -131,7 +131,7 @@ public struct IOSSimSwipeCommand: SimUseExecutableCommand {
         try await setup(logger: logger)
         try await performGlobalSetup(logger: logger)
         // Resizable app session (issue #143): touch HID cannot reach the app.
-        try await ResizableAppSessionGuard.assertTouchInputReachesApp(udid: device.resolved, verb: "swipe", logger: logger)
+        try await RoutingDisplayGuard.assertTouchInputReachesApp(udid: device.resolved, verb: "swipe", logger: logger)
 
         let coords = try coordinates.resolve()
         let swipeDuration = duration ?? 1.0
@@ -140,15 +140,14 @@ public struct IOSSimSwipeCommand: SimUseExecutableCommand {
         logger.info().log("Performing swipe from (\(coords.startX), \(coords.startY)) to (\(coords.endX), \(coords.endY))")
         logger.info().log("Duration: \(swipeDuration)s, Delta: \(swipeDelta)px")
 
-        // Native (the default) dispatches the user's coordinates
-        // untouched — the historical contract. ui opts them into the
-        // visual space describe-ui prints (issue #66 PR B).
+        // ui (the default) maps the endpoints from the space describe-ui
+        // prints; native dispatches them untouched.
         var advisory: CommandAdvisory? = nil
         let dispatch: (startX: Double, startY: Double, endX: Double, endY: Double)
         if coordinateSpace == .ui {
             let calibration = await UISpaceCalibrationLoader.load(
                 udid: device.resolved,
-                fallbackMessage: "Screen orientation could not be determined; --coordinate-space ui coordinates were dispatched as device-native portrait and may be wrong if the device is rotated.",
+                fallbackMessage: UISpaceCalibrationLoader.explicitCoordinatesFallback,
                 logger: logger
             )
             advisory = calibration.advisory

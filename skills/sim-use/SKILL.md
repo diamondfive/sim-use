@@ -46,7 +46,7 @@ Pick a selector, in order of preference:
 | `tap --label 'X'` | Scripted flows. Combine with `--wait-timeout` for transitions. |
 | `tap --label-regex '...'` | Dynamic labels with counters/timestamps. Anchor with `^...$`. |
 | `tap --label-contains 'X'` | Substring match when exact label is unknown. |
-| `tap -x N -y N` / `tap --point x,y` | Last resort for elements with no AX data. Device-native portrait space by default; add `--coordinate-space ui` when the numbers come from the outline and the device may be rotated. |
+| `tap -x N -y N` / `tap --point x,y` | Last resort for elements with no AX data. Takes the numbers the outline prints, in any orientation and on any display; `--coordinate-space native` is for device-native portrait points. |
 
 Disambiguate collisions with `--element-type` or `--frame minY=0.7r` (see `references/cheatsheet.md`).
 
@@ -83,7 +83,9 @@ Every byte of command output you read costs context. Defaults that keep the loop
 | Toggle/switch | `sim-use tap @N --duration 0.05 --device <UDID>` (UISwitch needs a brief hold) |
 | Swipe | `sim-use swipe --from 50,500 --to 350,500 --device <UDID>` |
 | Pinch zoom in | `sim-use gesture pinch-out --device <UDID>` (two-finger spread) |
-| Rotate | `sim-use gesture rotate-cw --angle 90 --device <UDID>` |
+| Rotate (two-finger gesture) | `sim-use gesture rotate-cw --angle 90 --device <UDID>` |
+| Rotate the device (iOS) | `sim-use ios rotate landscape-left --device <UDID>` — interface names as the `App:` header prints them; re-run `ui` after |
+| Fold / unfold (iPhone Duo) | `sim-use ios fold closed\|open --device <UDID>`; `sim-use ios fold --device <UDID>` reports which display is active; re-run `ui` after |
 | Record evidence GIF | `sim-use record-video --output demo.gif --device <UDID>` — stop with SIGINT/SIGTERM (never SIGKILL); transcodes after stop; auto-plays inline in PRs; add `--gif-markers` for START/END loop-boundary cards |
 
 ### Physical iOS devices (experimental)
@@ -136,10 +138,10 @@ Quick symptom index — see `references/pitfalls.md` for detailed recipes.
 | Android: `paste` denied | Background clipboard access blocked | Use `type` instead |
 | Outline shows `U+FFFC` in label | iOS icon placeholder character | Match with `--label-regex` excluding the prefix |
 | `[i] … covers ~N% of the screen` warning (text output, or `--json` top-level `advisory` key) | The selector resolved to a near-full-screen wrapper (common on Flutter/canvas UIs) and the tap hit its center, likely missing the intended control | Re-run `ui` and target the control via `@N`/`#<id>`, or pass explicit `-x/-y`/`--point` |
-| `[i] Screen orientation could not be confirmed…` / `…coordinates may be stale…` advisory | Device/app is rotated (the `App:` header shows a tag like `(landscape-right)`) and orientation self-calibration couldn't verify the mapping, or the `@N` snapshot predates a rotation | Re-run `ui` and tap again; selectors handle rotation automatically once calibration succeeds. Explicit `-x/-y`/`--point` is device-native portrait space by default — on `tap`/`swipe`/`touch`, pass `--coordinate-space ui` to use outline (visual-space) coordinates on a rotated device |
+| `[i] Screen orientation could not be confirmed…` / `…coordinates may be stale…` advisory | Device/app is rotated (the `App:` header shows a tag like `(landscape-right)`) and orientation self-calibration couldn't verify the mapping, or the `@N` snapshot predates a rotation | Re-run `ui` and tap again; selectors handle rotation automatically once calibration succeeds. Explicit `-x/-y`/`--point` take outline (visual-space) coordinates and ride the same calibration; `--coordinate-space native` is for device-native portrait points |
 | Outline is empty or misses visible app controls, or `[i] … recovered from other processes …` advisory (`--json`: `advisory.kind: remote_content_recovery`) | The app exposed an empty accessibility tree. Normal for a system picker. Otherwise, on an iOS simulator, a likely cause is that app accessibility was off when the app launched | Compare the outline with the screen. If controls are missing, see [Missing app controls](references/pitfalls.md#missing-app-controls-in-the-outline) |
 | iOS: `ui` fails with `No translation object returned for simulator <UDID> for the frontmost application` on every screen, while `screenshot` and `ui --point` still work | The simulator's accessibility bridge (`CoreSimulatorBridge`) is stale | Follow the error's hint: run `xcrun simctl spawn <UDID> launchctl stop com.apple.CoreSimulator.bridge` (launchd restarts it at once), then retry `ui`. Right after a boot, wait a few seconds and retry first |
-| iOS: `tap`/`swipe`/`gesture`/`record-video`/`stream-video` fail with `A resizable app session (Xcode 27 Resize Mode) is active …`, or `ui` shows `[i] A resizable app session … is active` (`--json`: `advisory.kind: resizable_app_session`) and an `App:` size that is not a real device size | The simulator is in Xcode 27 Resize Mode: the app renders on a virtual `Resizable` display that simulator touch input cannot reach, so sim-use refuses the touch rather than report a delivered tap that did nothing | Read `ui` and `screenshot` freely (both describe the resized app); drive the app with `type`, Cmd+V `paste` and the key verbs only (`paste --via-menu` is a touch path and is refused too); to tap, end the session (stop the `devicectl device appResize start` process or rotate the device) — see [Resize Mode](references/pitfalls.md#ios-resize-mode-resizable-app-session) |
+| iOS: the `ui` header ends in `display LCD-1` or `display Resizable 560x874` (`--json`: `data.display`) | The app is not on the main display: an unfolded iPhone Duo (inner display `LCD-1`) or an Xcode 27 Resize Mode session (`Resizable`). Touch, `ui`, `ui --point`, `screenshot` and `record-video` / `stream-video` (`h264`, `bgra`) are routed there automatically | Work as usual — selectors and `@N` land on that display; the vertical bar of an iOS 27.1 SDK app (back button, tabs) is listed last as `[Trailing …]` / `[Leading …]`. Explicit `-x/-y` take the numbers `ui` prints there; `--coordinate-space native` means that display's native points. See [iPhone Duo](references/pitfalls.md#ios-iphone-duo-multi-display-simulator) and [Resize Mode](references/pitfalls.md#ios-resize-mode-resizable-app-session) |
 
 ## 3. Crash awareness
 

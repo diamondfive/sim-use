@@ -34,14 +34,19 @@ extension FBSimulator {
     /// (`NativePortraitSize.uiMetric`), so a rotated UI-space region
     /// samples the wrong band, and a pixels/scale region leaves a
     /// downscaled panel's right/bottom edge unsampled.
+    ///
+    /// `displayId` names the accessibility display (the CoreDevice display
+    /// id; 0 is the main display) — the display the remote-content grid
+    /// probes run on. The tree itself follows the frontmost app either way.
     func legacyAccessibilityElements(
         nestedFormat: Bool,
         includeRemoteContent: Bool = false,
-        remoteSamplingRegion: CGRect? = nil
+        remoteSamplingRegion: CGRect? = nil,
+        displayId: UInt32 = 0
     ) async throws -> AnyObject {
         let element: FBAccessibilityElement
         do {
-            element = try await accessibilityElementForFrontmostApplication()
+            element = try await accessibilityElementForFrontmostApplication(displayId: displayId)
         } catch {
             throw FrontmostAccessibilityError.mapping(error, udid: udid)
         }
@@ -55,11 +60,22 @@ extension FBSimulator {
         return response.elements as AnyObject
     }
 
+    /// The frontmost application's frame, without serializing its tree —
+    /// the root size the routing checks need, for a few milliseconds
+    /// instead of a tree fetch. Follows the frontmost app like
+    /// `legacyAccessibilityElements`.
+    func frontmostApplicationFrame() async throws -> CGRect {
+        let element = try await accessibilityElementForFrontmostApplication(displayId: 0)
+        defer { element.close() }
+        return try element.frame()
+    }
+
     /// The accessibility element at `point`, in the same single-dictionary
     /// shape the pre-Swiftification `accessibilityElement(at:nestedFormat:)`
-    /// returned.
-    func legacyAccessibilityElement(at point: CGPoint, nestedFormat: Bool) async throws -> AnyObject {
-        let element = try await accessibilityElement(at: point)
+    /// returned. `point` is in the unrotated points of display `displayId`
+    /// (0 is the main display).
+    func legacyAccessibilityElement(at point: CGPoint, nestedFormat: Bool, displayId: UInt32 = 0) async throws -> AnyObject {
+        let element = try await accessibilityElement(at: point, displayId: displayId)
         defer { element.close() }
         let response = try element.serialize(with: FBAccessibilityRequestOptions(nestedFormat: nestedFormat))
         return response.elements as AnyObject

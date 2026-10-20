@@ -374,6 +374,7 @@ run_tests() {
             "BatchTests"
             "ButtonTests"
             "DescribeUITests"
+            "FoldTests"
             "GestureTests"
             "HIDRebootRecoveryTests"
             "InitTests"
@@ -388,13 +389,17 @@ run_tests() {
             "RecordVideoTests"
             "RemoteContentRecoveryTests"
             "ResizeModeTests"
+            "RotateTests"
+            "RoutedVideoTests"
             "ScreenshotTests"
+            "SideBarOutlineTests"
             "StreamVideoDebugTest"
             "StreamVideoTests"
             "SwipeTests"
             "TapTests"
             "TouchTests"
             "TypeTests"
+            "UICoordinateDefaultTests"
         )
     fi
 

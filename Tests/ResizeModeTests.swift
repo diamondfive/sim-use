@@ -2,7 +2,8 @@
 import Foundation
 import Testing
 
-// Live coverage for the Xcode 27 Resize Mode stop-gap (issue #143). Needs
+// Live coverage for Xcode 27 Resize Mode (issue #143): routing to the
+// `Resizable` display (docs/ai/010-display-routing). Needs
 // a booted iOS 27+ simulator on an Xcode 27 toolchain: the suite probes
 // `devicectl device info appResize` first and skips itself (not fails)
 // when CoreDevice cannot host a session — on Xcode 26 legs of the E2E
@@ -93,8 +94,19 @@ struct ResizeModeTests {
         try #require(try JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any], "expected JSON, got: \(text.prefix(300))")
     }
 
-    @Test("ui carries the resizable_app_session advisory and keeps the tree to the app's own process")
-    func describeUIAdvisory() async throws {
+    /// The Playground tap-test screen's echo of the last tap, e.g. "(100, 300)".
+    private static func tapEcho(_ outline: String) -> (count: String?, location: String?) {
+        func value(after prefix: String) -> String? {
+            outline.components(separatedBy: "\n").lazy.compactMap { line -> String? in
+                guard let range = line.range(of: prefix) else { return nil }
+                return String(line[range.upperBound...].prefix { $0 != "\"" })
+            }.first
+        }
+        return (value(after: "Tap Count: "), value(after: "Tap Location: "))
+    }
+
+    @Test("ui names the Resizable display and keeps the tree to the app's own process")
+    func describeUIRoutesToResizable() async throws {
         let udid = try TestHelpers.requireSimulatorUDID()
         let simUse = try TestHelpers.getSimUsePath()
         try await TestHelpers.launchPlaygroundApp(to: "tap-test")
@@ -106,14 +118,14 @@ struct ResizeModeTests {
 
         let (stdout, _) = try await CommandRunner.run("\(simUse) ui --udid \(udid) --json")
         let envelope = try Self.json(stdout)
-        let advisory = try #require(envelope["advisory"] as? [String: Any])
-        #expect(advisory["kind"] as? String == "resizable_app_session")
-        #expect((advisory["message"] as? String ?? "").contains("'Resizable' display"))
-
         let data = try #require(envelope["data"] as? [String: Any])
+        let display = try #require(data["display"] as? [String: Any])
+        #expect(display["name"] as? String == "Resizable")
+        #expect(display["kind"] as? String == "virtual")
         let screen = try #require(data["screen"] as? [String: Any])
         #expect(screen["width"] as? Int == 560, "scene width should be the requested 560, got \(String(describing: screen["width"]))")
         #expect(data["orientation"] as? String == "portrait")
+        #expect((data["outline"] as? String ?? "").contains("(display Resizable 560x874)"))
 
         // No SpringBoard splicing: every node is the app's own process.
         var pids = Set<Int>()
@@ -127,127 +139,190 @@ struct ResizeModeTests {
         await session.end()
     }
 
-    @Test("touch verbs refuse with the session error; type still reaches the app")
-    func touchRefusedKeyboardWorks() async throws {
-        let udid = try TestHelpers.requireSimulatorUDID()
-        let simUse = try TestHelpers.getSimUsePath()
-        // The text-input screen focuses its field on launch (TypeTests
-        // relies on the same), so nothing needs tapping before the session.
-        try await TestHelpers.launchPlaygroundApp(to: "text-input")
-
-        guard let session = try await Self.startSession(udid: udid) else { return }
-        defer { Task { await session.end() } }
-
-        // The daemon caches the devicectl answer for 5 s and the launch
-        // helper's describe-ui may have cached "no session" moments ago.
-        // A `ui` here sees the 560-wide root, which bypasses that cache,
-        // so the touch verbs below meet an up-to-date gate.
-        _ = try await CommandRunner.run("\(simUse) ui --udid \(udid)", allowFailure: true)
-
-        let tap = try await CommandRunner.run("\(simUse) tap --udid \(udid) -x 100 -y 300 --json", allowFailure: true)
-        #expect(tap.exitCode != 0)
-        let tapEnvelope = try Self.json(tap.output)
-        #expect(tapEnvelope["ok"] as? Bool == false)
-        #expect((tapEnvelope["error"] as? String ?? "").contains("resizable app session"))
-        #expect((tapEnvelope["hint"] as? String ?? "").contains("appResize start"))
-
-        let swipe = try await CommandRunner.run("\(simUse) swipe --udid \(udid) --start-x 100 --start-y 600 --end-x 100 --end-y 200", allowFailure: true)
-        #expect(swipe.exitCode != 0)
-        #expect(swipe.output.contains("this swipe would report success and deliver nothing"))
-
-        let batchFile = FileManager.default.temporaryDirectory.appendingPathComponent("resize-batch-\(UUID().uuidString).txt")
-        try "type x\ntap @1\n".write(to: batchFile, atomically: true, encoding: .utf8)
-        defer { try? FileManager.default.removeItem(at: batchFile) }
-        let batch = try await CommandRunner.run("\(simUse) ios batch --udid \(udid) --file \(batchFile.path)", allowFailure: true)
-        #expect(batch.exitCode != 0)
-        #expect(batch.output.contains("this batch would report success"))
-
-        // `paste --via-menu` is a touch path (long-press + menu taps) and
-        // is refused before the pasteboard is written — for a coordinate
-        // target and for an id target alike (R150-01). Cmd+V paste is
-        // keyboard HID and stays available.
-        let pasteXY = try await CommandRunner.run(
-            "\(simUse) paste --udid \(udid) --via-menu --target-x 100 --target-y 300 --menu-timeout 0.5 --json menu-xy", allowFailure: true
-        )
-        #expect(pasteXY.exitCode != 0)
-        let pasteXYEnvelope = try Self.json(pasteXY.output)
-        #expect((pasteXYEnvelope["error"] as? String ?? "").contains("this paste --via-menu would report success"))
-        let pasteID = try await CommandRunner.run(
-            "\(simUse) paste --udid \(udid) --via-menu --target-id text-input-screen --menu-timeout 0.5 menu-id", allowFailure: true
-        )
-        #expect(pasteID.exitCode != 0)
-        #expect(pasteID.output.contains("this paste --via-menu would report success"))
-        let pasteKeyboard = try await CommandRunner.run("\(simUse) paste --udid \(udid) kbd", allowFailure: true)
-        #expect(pasteKeyboard.exitCode == 0, "Cmd+V paste must not be refused: \(pasteKeyboard.output.prefix(300))")
-        #expect(!pasteKeyboard.output.contains("resizable app session"))
-
-        _ = try await CommandRunner.run("\(simUse) type --udid \(udid) 'resized'")
-        try await Task.sleep(nanoseconds: 1_000_000_000)
-        let (outline, _) = try await CommandRunner.run("\(simUse) ui --udid \(udid)")
-        #expect(outline.contains("resized"), "typed text should reach the resized app; outline:\n\(outline.prefix(600))")
-
-        await session.end()
-    }
-
-    @Test("a batch started inside the stale no-session cache window is still refused at its first touch step (R150-02)")
-    func batchInsideStaleCacheWindowIsRefused() async throws {
+    @Test("touch input lands in the resized app at the requested point")
+    func touchLandsInSession() async throws {
         let udid = try TestHelpers.requireSimulatorUDID()
         let simUse = try TestHelpers.getSimUsePath()
         try await TestHelpers.launchPlaygroundApp(to: "tap-test")
-        // Warm the daemon's cache with "no session" right before the
-        // session starts — the shape the reviewer reproduced live. The
-        // pre-scan then sees a stale inactive answer; the selector step's
-        // tree fetch supplies the 560-wide evidence, and the per-step
-        // gate must refuse before the first touch is dispatched.
-        _ = try await CommandRunner.run("\(simUse) ui --udid \(udid)", allowFailure: true)
         guard let session = try await Self.startSession(udid: udid) else { return }
         defer { Task { await session.end() } }
+        _ = try await CommandRunner.run("\(simUse) ui --udid \(udid)", allowFailure: true)
 
-        let batchFile = FileManager.default.temporaryDirectory.appendingPathComponent("resize-stale-batch-\(UUID().uuidString).txt")
-        try "tap --label 'Tap Count: 0'\nsleep 1\ntap -x 100 -y 300\n".write(to: batchFile, atomically: true, encoding: .utf8)
-        defer { try? FileManager.default.removeItem(at: batchFile) }
-        let batch = try await CommandRunner.run("\(simUse) ios batch --udid \(udid) --file \(batchFile.path) --json", allowFailure: true)
-        #expect(batch.exitCode != 0, "batch must not report success inside a session: \(batch.output.prefix(400))")
-        let envelope = try Self.json(batch.output)
-        #expect(envelope["ok"] as? Bool == false)
-        #expect((envelope["error"] as? String ?? "").contains("this batch would report success and deliver nothing"))
-        #expect((envelope["hint"] as? String ?? "").contains("appResize start"))
-
-        // Nothing reached the app.
+        _ = try await CommandRunner.run("\(simUse) tap --udid \(udid) -x 100 -y 300")
+        _ = try await CommandRunner.run("\(simUse) tap --udid \(udid) -x 450 -y 650")
+        try await Task.sleep(nanoseconds: 800_000_000)
         let (outline, _) = try await CommandRunner.run("\(simUse) ui --udid \(udid)")
-        #expect(outline.contains("Tap Count: 0"), "no touch may have landed; outline:\n\(outline.prefix(600))")
+        let echo = Self.tapEcho(outline)
+        #expect(echo.count == "2", "both taps should land: \(outline.prefix(600))")
+        #expect(echo.location == "(450, 650)", "the scene point must land exactly: \(String(describing: echo.location))")
+
+        // A batch touch step lands as well.
+        let batchFile = FileManager.default.temporaryDirectory.appendingPathComponent("resize-batch-\(UUID().uuidString).txt")
+        try "tap -x 200 -y 500\n".write(to: batchFile, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: batchFile) }
+        _ = try await CommandRunner.run("\(simUse) ios batch --udid \(udid) --file \(batchFile.path)")
+        try await Task.sleep(nanoseconds: 800_000_000)
+        let (afterBatch, _) = try await CommandRunner.run("\(simUse) ui --udid \(udid)")
+        #expect(Self.tapEcho(afterBatch).location == "(200, 500)")
+
+        // A selector tap: the back button returns to the Playground home.
+        _ = try await CommandRunner.run("\(simUse) tap --udid \(udid) --id BackButton")
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+        let (home, _) = try await CommandRunner.run("\(simUse) ui --udid \(udid)")
+        #expect(home.contains("Touch & Gestures"), "the back button tap should land: \(home.prefix(400))")
 
         await session.end()
     }
 
-    @Test("a selector tap inside the stale cache window is refused for a scene proportional to the device (R150-05)")
-    func selectorTapInsideStaleWindowProportionalScene() async throws {
+    @Test("a session that starts inside a stale no-session cache window still gets its touches (R150-02, R150-05)")
+    func touchInsideStaleCacheWindowLands() async throws {
         let udid = try TestHelpers.requireSimulatorUDID()
         let simUse = try TestHelpers.getSimUsePath()
         try await TestHelpers.launchPlaygroundApp(to: "tap-test")
         // Warm "no session", then start a session whose scene is the
-        // device's 402x874 scaled uniformly (~1.194x). The reviewer slipped
-        // a tap past a proportional-size exclusion with exactly this; the
-        // selector fetch must now count 480x1044 as evidence and refuse.
+        // device's 402x874 scaled uniformly. The selector tap's tree fetch
+        // sees the new root size and re-reads the session, so the touch
+        // goes to the Resizable display instead of the main one.
         _ = try await CommandRunner.run("\(simUse) ui --udid \(udid)", allowFailure: true)
         guard let session = try await Self.startSession(udid: udid, size: "480x1044") else { return }
         defer { Task { await session.end() } }
 
-        let tap = try await CommandRunner.run("\(simUse) tap --udid \(udid) --label 'Tap Count: 0' --json", allowFailure: true)
-        #expect(tap.exitCode != 0, "selector tap must be refused inside the window: \(tap.output.prefix(400))")
-        let envelope = try Self.json(tap.output)
-        #expect(envelope["ok"] as? Bool == false)
-        #expect((envelope["error"] as? String ?? "").contains("resizable app session"))
-
+        _ = try await CommandRunner.run("\(simUse) tap --udid \(udid) --label 'Tap Count: 0'")
+        try await Task.sleep(nanoseconds: 800_000_000)
         let (outline, _) = try await CommandRunner.run("\(simUse) ui --udid \(udid)")
-        #expect(outline.contains("[i] A resizable app session"))
-        #expect(outline.contains("Tap Count: 0"))
+        #expect(Self.tapEcho(outline).count == "1", "the selector tap must land in the resized app: \(outline.prefix(600))")
 
         await session.end()
     }
 
-    @Test("record-video and stream-video are refused during a session, before producing output (R150-06)")
-    func videoCaptureRefused() async throws {
+    @Test("the first directional gesture after a session starts, and after it ends, reaches the app (R158-03)")
+    func firstGestureFollowsSession() async throws {
+        let udid = try TestHelpers.requireSimulatorUDID()
+        let simUse = try TestHelpers.getSimUsePath()
+        try await TestHelpers.launchPlaygroundApp(to: "gesture-presets")
+        func detected() async throws -> String? {
+            let ui = try await TestHelpers.getUIState(simulatorUDID: udid)
+            return UIStateParser.findElementContainingLabel(in: ui, containing: "Detected:")?.label
+        }
+        // Warm "no session" in the daemon, then start one with no `ui` in
+        // between: the gesture's own calibration fetch must see the scene.
+        _ = try await CommandRunner.run("\(simUse) ui --udid \(udid)", allowFailure: true)
+        guard let session = try await Self.startSession(udid: udid) else { return }
+        defer { Task { await session.end() } }
+        _ = try await CommandRunner.run("\(simUse) gesture scroll-up --duration 0.4 --udid \(udid)")
+        try await Task.sleep(nanoseconds: 800_000_000)
+        #expect(try await detected() == "Detected: 1", "the first gesture in the session must land")
+
+        // End it, again with no `ui` before the gesture.
+        await session.end()
+        _ = try await CommandRunner.run("\(simUse) gesture scroll-up --duration 0.4 --udid \(udid)")
+        try await Task.sleep(nanoseconds: 800_000_000)
+        #expect(try await detected() == "Detected: 2", "the first gesture after the session must land on the main display")
+    }
+
+    @Test("a batch keeps the connection its first routed touch upgraded (S6-001)")
+    func batchKeepsUpgradedConnection() async throws {
+        let udid = try TestHelpers.requireSimulatorUDID()
+        let simUse = try TestHelpers.getSimUsePath()
+        try await TestHelpers.launchPlaygroundApp(to: "text-input")
+        guard let session = try await Self.startSession(udid: udid) else { return }
+        defer { Task { await session.end() } }
+        // With Device Hub closed the batch's session starts on Indigo; the
+        // routed tap starts dtuhidd and upgrades the connection, and the
+        // type step must use the upgraded one, not the disconnected one.
+        let (outline, _) = try await CommandRunner.run("\(simUse) ui --udid \(udid)")
+        let field = outline.components(separatedBy: "\n").first { $0.contains("TextField") } ?? ""
+        let frame = try #require(field.firstMatch(of: #/\((\d+),(\d+) (\d+)x(\d+)\)/#), "no text field: \(outline.prefix(400))")
+        let x = Int(frame.1)! + Int(frame.3)! / 2, y = Int(frame.2)! + Int(frame.4)! / 2
+        let text = "s6b\(Int.random(in: 100...999))"
+        let batch = try await CommandRunner.run(
+            // Two keyboard chunks and a second touch above the field: a
+            // second tap on it soon after the first is a double tap that
+            // selects the text, and below it the software keyboard (Device
+            // Hub open) would type the key under the touch.
+            "\(simUse) ios batch --udid \(udid) --step 'tap -x \(x) -y \(y)' --step 'type \(text)' --step 'type x' --step 'tap -x \(x) -y \(Int(frame.2)! - 30)'",
+            allowFailure: true, timeout: 60)
+        #expect(batch.exitCode == 0, "batch failed: \(batch.output.suffix(400))")
+        try await Task.sleep(nanoseconds: 800_000_000)
+        let (after, _) = try await CommandRunner.run("\(simUse) ui --udid \(udid)")
+        #expect(after.contains("TextField  \"\(text)x\""), "typed text should reach the field: \(after.prefix(500))")
+        await session.end()
+    }
+
+    @Test("the first gesture after a session is resized uses the new scene size (R161-01)")
+    func firstGestureAfterResize() async throws {
+        let udid = try TestHelpers.requireSimulatorUDID()
+        let simUse = try TestHelpers.getSimUsePath()
+        try await TestHelpers.launchPlaygroundApp(to: "gesture-presets")
+        guard let session = try await Self.startSession(udid: udid, size: "560x1200") else { return }
+        defer { Task { await session.end() } }
+        // A snapshot of the tall scene; then the session shrinks with no
+        // `ui` before the gesture. The old canvas would put the stroke
+        // below the new scene.
+        _ = try await CommandRunner.run("\(simUse) ui --udid \(udid)", allowFailure: true)
+        _ = try await CommandRunner.run(
+            "xcrun devicectl device appResize set --device \(udid) --preferred-size 560x667 --quiet --timeout 10")
+        try await Task.sleep(nanoseconds: 1_500_000_000)
+        _ = try await CommandRunner.run("\(simUse) gesture scroll-up --duration 0.4 --udid \(udid)")
+        try await Task.sleep(nanoseconds: 800_000_000)
+        let ui = try await TestHelpers.getUIState(simulatorUDID: udid)
+        let detected = UIStateParser.findElementContainingLabel(in: ui, containing: "Detected:")?.label
+        #expect(detected == "Detected: 1", "the gesture must land in the resized scene, got \(String(describing: detected))")
+        await session.end()
+    }
+
+    @Test("the first explicit tap after a session starts, and after it ends, reaches the app (S3)")
+    func firstExplicitTapFollowsSession() async throws {
+        let udid = try TestHelpers.requireSimulatorUDID()
+        let simUse = try TestHelpers.getSimUsePath()
+        try await TestHelpers.launchPlaygroundApp(to: "tap-test")
+        // A device-sized snapshot and a warm "no session"; then the
+        // session starts with no `ui` before the tap. UI-space coordinates
+        // calibrate from the snapshot only when probes confirm it.
+        _ = try await CommandRunner.run("\(simUse) ui --udid \(udid)", allowFailure: true)
+        guard let session = try await Self.startSession(udid: udid) else { return }
+        defer { Task { await session.end() } }
+        _ = try await CommandRunner.run("\(simUse) tap --udid \(udid) -x 450 -y 650")
+        try await Task.sleep(nanoseconds: 800_000_000)
+        let (during, _) = try await CommandRunner.run("\(simUse) ui --udid \(udid)")
+        #expect(Self.tapEcho(during).count == "1", "the first tap in the session must land: \(during.prefix(400))")
+        #expect(Self.tapEcho(during).location == "(450, 650)")
+
+        // The snapshot is now the session's; end it with no `ui` before
+        // the next tap.
+        await session.end()
+        _ = try await CommandRunner.run("\(simUse) tap --udid \(udid) -x 200 -y 400")
+        try await Task.sleep(nanoseconds: 800_000_000)
+        let (after, _) = try await CommandRunner.run("\(simUse) ui --udid \(udid)")
+        #expect(Self.tapEcho(after).count == "2", "the first tap after the session must land on the main display: \(after.prefix(400))")
+    }
+
+    @Test("the first point query after a session starts, and after it ends, describes the app (R158-05)")
+    func firstPointQueryFollowsSession() async throws {
+        let udid = try TestHelpers.requireSimulatorUDID()
+        let simUse = try TestHelpers.getSimUsePath()
+        try await TestHelpers.launchPlaygroundApp(to: "tap-test")
+        func pointQuery() async throws -> (app: String?, display: String?) {
+            let (output, _) = try await CommandRunner.run("\(simUse) ui --point 200,300 --json --no-raw --udid \(udid) 2>/dev/null")
+            let data = try Self.json(output)["data"] as? [String: Any]
+            return (data?["appPackage"] as? String, (data?["display"] as? [String: Any])?["name"] as? String)
+        }
+        // Warm "no session", then make a point query the first command.
+        _ = try await CommandRunner.run("\(simUse) ui --udid \(udid)", allowFailure: true)
+        guard let session = try await Self.startSession(udid: udid) else { return }
+        defer { Task { await session.end() } }
+        let during = try await pointQuery()
+        #expect(during.app == "com.cameroncooke.SimUsePlayground", "the point query must describe the resized app, got \(String(describing: during.app))")
+        #expect(during.display == "Resizable")
+
+        await session.end()
+        let after = try await pointQuery()
+        #expect(after.app == "com.cameroncooke.SimUsePlayground")
+        #expect(after.display == nil)
+    }
+
+    @Test("record-video and stream-video capture the scene during a session; the screenshot formats refuse (S5)")
+    func videoCapturesScene() async throws {
         let udid = try TestHelpers.requireSimulatorUDID()
         let simUse = try TestHelpers.getSimUsePath()
         try await TestHelpers.launchPlaygroundApp(to: "tap-test")
@@ -255,27 +330,79 @@ struct ResizeModeTests {
         defer { Task { await session.end() } }
         _ = try await CommandRunner.run("\(simUse) ui --udid \(udid)", allowFailure: true)
 
+        // The recording is the 560x874 scene at 3x, cut from the canvas.
         let output = FileManager.default.temporaryDirectory.appendingPathComponent("resize-record-\(UUID().uuidString).mp4")
         defer { try? FileManager.default.removeItem(at: output) }
-        let record = try await CommandRunner.run(
-            "\(simUse) record-video --udid \(udid) --fps 5 --output \(output.path) --json", allowFailure: true, timeout: 20
-        )
-        #expect(record.exitCode != 0)
-        let recordEnvelope = try Self.json(record.output)
-        #expect((recordEnvelope["error"] as? String ?? "").contains("`record-video` captures only the main display"))
-        #expect((recordEnvelope["hint"] as? String ?? "").contains("recordVideo --display="))
-        #expect(!FileManager.default.fileExists(atPath: output.path), "no output file may be created")
+        try await RoutedVideo.record(simUse: simUse, udid: udid, output: output, seconds: 2.5)
+        let size = try await RoutedVideo.videoSize(output)
+        #expect(size == CGSize(width: 1680, height: 2622), "recorded \(String(describing: size))")
 
-        // stream-video rejects --json by design (stdout carries the video
-        // bytes), so the refusal is the plain stderr form; it exits before
-        // the stream starts, so no pipe or timeout dance is needed.
-        let stream = try await CommandRunner.run(
-            "\(simUse) stream-video --udid \(udid) --format h264 --fps 5", allowFailure: true, timeout: 20
-        )
-        #expect(stream.exitCode != 0)
-        #expect(stream.output.contains("`stream-video` captures only the main display"), "stream must refuse before emitting video: \(stream.output.prefix(300))")
-        #expect(stream.output.contains("recordVideo --display="))
+        // The native stream reads the same display.
+        let bytes = try await RoutedVideo.stream(simUse: simUse, udid: udid, seconds: 2.5)
+        #expect(bytes.count > 10_000 && bytes.first == 0x47, "expected an MPEG-TS stream, got \(bytes.count) bytes")
 
+        // The screenshot loop reads the main display only: refused before
+        // a single byte reaches stdout.
+        let refused = try await CommandRunner.run(
+            "\(simUse) stream-video --udid \(udid) --format mjpeg --fps 5", allowFailure: true, timeout: 20
+        )
+        #expect(refused.exitCode != 0)
+        #expect(refused.output.contains("captures only the main display"), "mjpeg must refuse: \(refused.output.prefix(300))")
+        #expect(refused.output.contains("--format h264"))
+
+        await session.end()
+    }
+
+    @Test("a recording follows the scene the session snapped to (S5-001)")
+    func recordingFollowsSnappedScene() async throws {
+        let udid = try TestHelpers.requireSimulatorUDID()
+        let simUse = try TestHelpers.getSimUsePath()
+        _ = try? await CommandRunner.run("xcrun simctl terminate \(udid) com.apple.Preferences", allowFailure: true)
+        _ = try await CommandRunner.run("xcrun simctl launch \(udid) com.apple.Preferences")
+        try await Task.sleep(nanoseconds: 2_000_000_000)
+        // Settings' root does not keep a session; its General page does.
+        _ = try await CommandRunner.run("\(simUse) tap --id com.apple.settings.general --udid \(udid)", allowFailure: true)
+        try await Task.sleep(nanoseconds: 1_500_000_000)
+        guard let session = try await Self.startSession(udid: udid) else { return }
+        defer { Task { await session.end() } }
+        _ = try await CommandRunner.run(
+            "xcrun devicectl device appResize set --device \(udid) --preferred-size 402x874 --quiet --timeout 10", allowFailure: true)
+        try await Task.sleep(nanoseconds: 2_000_000_000)
+
+        // The header shows the scene the app actually took.
+        let (outline, _) = try await CommandRunner.run("\(simUse) ui --udid \(udid)")
+        let header = outline.components(separatedBy: "\n").first ?? ""
+        let size = try #require(header.firstMatch(of: #/  (\d+)x(\d+)  /#), "header: \(header)")
+        let sceneWidth = Int(size.1)!, sceneHeight = Int(size.2)!
+        func even(_ value: Int) -> Int { (value + 1) / 2 * 2 }
+
+        let output = FileManager.default.temporaryDirectory.appendingPathComponent("snap-record-\(UUID().uuidString).mp4")
+        defer { try? FileManager.default.removeItem(at: output) }
+        try await RoutedVideo.record(simUse: simUse, udid: udid, output: output, seconds: 2.5)
+        let recorded = try await RoutedVideo.videoSize(output)
+        #expect(recorded == CGSize(width: even(sceneWidth * 3), height: even(sceneHeight * 3)),
+                "scene \(sceneWidth)x\(sceneHeight) pt, recorded \(String(describing: recorded))")
+        await session.end()
+    }
+
+    @Test("a short recording whose scene is resized ends with the notice (S5-003)")
+    func shortRecordingResizeNotice() async throws {
+        let udid = try TestHelpers.requireSimulatorUDID()
+        let simUse = try TestHelpers.getSimUsePath()
+        try await TestHelpers.launchPlaygroundApp(to: "tap-test")
+        guard let session = try await Self.startSession(udid: udid) else { return }
+        defer { Task { await session.end() } }
+        _ = try await CommandRunner.run("\(simUse) ui --udid \(udid)", allowFailure: true)
+
+        let output = FileManager.default.temporaryDirectory.appendingPathComponent("short-record-\(UUID().uuidString).mp4")
+        defer { try? FileManager.default.removeItem(at: output) }
+        // Well inside the session monitor's 5 s cache window.
+        let stderr = try await RoutedVideo.record(simUse: simUse, udid: udid, output: output, seconds: 2.4) {
+            _ = try? await CommandRunner.run(
+                "xcrun devicectl device appResize set --device \(udid) --preferred-size 560x667 --quiet --timeout 10", allowFailure: true)
+        }
+        #expect(stderr.contains("was resized while `record-video` ran"), "stderr: \(stderr)")
+        #expect(try await RoutedVideo.videoSize(output) == CGSize(width: 1680, height: 2622))
         await session.end()
     }
 

@@ -65,10 +65,19 @@ public enum OutlineFormatter {
     ///   (issue #34), appended to the `App:` header so agents reading
     ///   the outline know the device is rotated. Pass nil for portrait —
     ///   the common-case header stays byte-identical to the legacy form.
+    /// - Parameter displayTag: names the display that hosts the app when
+    ///   it is not the main display (for example `display LCD-1`), so the
+    ///   single-display header stays byte-identical.
+    /// - Parameter screenSize: the interface size of that display, used
+    ///   instead of the Application root frame, which keeps the panel's
+    ///   portrait size on a rotated secondary display (669x951 for a
+    ///   951x669 interface on the iPhone Duo inner screen).
     public static func render(
         tree: [AccessibilityElement],
         foregroundBundleId: String? = nil,
-        orientationTag: String? = nil
+        orientationTag: String? = nil,
+        displayTag: String? = nil,
+        screenSize: (width: Double, height: Double)? = nil
     ) -> Outline {
         let root = pickRoot(tree)
         let isApplicationRoot = root?.type == "Application"
@@ -79,7 +88,13 @@ public enum OutlineFormatter {
         // element), use a zero screen so the renderer keeps every node
         // and falls back to the neutral `Content` region.
         let screen: Outline.Frame
-        if isApplicationRoot, let appFrame = root?.frame {
+        if isApplicationRoot, let screenSize {
+            screen = Outline.Frame(
+                x: 0, y: 0,
+                width: Int(screenSize.width.rounded()),
+                height: Int(screenSize.height.rounded())
+            )
+        } else if isApplicationRoot, let appFrame = root?.frame {
             screen = Outline.Frame(
                 x: 0, y: 0,
                 width: Int(appFrame.width.rounded()),
@@ -149,12 +164,29 @@ public enum OutlineFormatter {
             ))
         }
 
+        // A vertical bar of system chrome along one side (iPhone Duo,
+        // iOS 27.1 SDK apps) becomes its own region, listed after the
+        // bands so aliases stay in print order. Declared regions win.
+        let bars = OutlineSideBars.detect(
+            sorted.map { OutlineSideBars.Item(frame: $0.frame, role: $0.collected.element.type, uniqueId: $0.collected.element.normalizedUniqueId) },
+            screen: screen
+        )
+        let placed: [(item: Rounded, region: Outline.Region)] = sorted.map { item in
+            if let declared = item.collected.declaredRegion { return (item, declared) }
+            if let bar = bars.first(where: { $0.contains(item.frame) }) {
+                return (item, Outline.Region(kind: bar.edge.rawValue, label: nil))
+            }
+            return (item, yBandRegion(for: item.frame, screenHeight: screen.height))
+        }
+        let sideKinds = Set(bars.map(\.edge.rawValue))
+        let ordered = placed.filter { !sideKinds.contains($0.region.kind) }
+            + placed.filter { $0.region.kind == OutlineSideBars.Edge.leading.rawValue }
+            + placed.filter { $0.region.kind == OutlineSideBars.Edge.trailing.rawValue }
+
         var entries: [Outline.Entry] = []
-        entries.reserveCapacity(sorted.count)
-        for (index, item) in sorted.enumerated() {
+        entries.reserveCapacity(ordered.count)
+        for (index, (item, region)) in ordered.enumerated() {
             let element = item.collected.element
-            let region = item.collected.declaredRegion
-                ?? yBandRegion(for: item.frame, screenHeight: screen.height)
             let uniqueId: String? = {
                 guard let raw = element.normalizedUniqueId, !raw.isEmpty else { return nil }
                 return raw
@@ -180,7 +212,14 @@ public enum OutlineFormatter {
             ))
         }
 
-        let text = renderText(appLabel: appLabel, screen: screen, entries: entries, orientationTag: orientationTag)
+        let headerTag = [orientationTag, displayTag].compactMap { $0 }.joined(separator: ", ")
+        let text = renderText(
+            appLabel: appLabel,
+            screen: screen,
+            entries: entries,
+            orientationTag: headerTag.isEmpty ? nil : headerTag,
+            sideBoundaries: Dictionary(bars.map { ($0.edge.rawValue, $0.boundary) }, uniquingKeysWith: { first, _ in first })
+        )
         return Outline(text: text, entries: entries, lists: lists, screen: screen, appLabel: appLabel)
     }
 
@@ -392,7 +431,8 @@ public enum OutlineFormatter {
         appLabel: String,
         screen: Outline.Frame,
         entries: [Outline.Entry],
-        orientationTag: String? = nil
+        orientationTag: String? = nil,
+        sideBoundaries: [String: Int] = [:]
     ) -> String {
         var output = ""
         // Two header shapes: a real Application root carries its frame,
@@ -425,7 +465,7 @@ public enum OutlineFormatter {
 
         for key in order {
             output.append("\n")
-            output.append(regionHeader(key, screenHeight: screen.height))
+            output.append(regionHeader(key, screenHeight: screen.height, sideBoundaries: sideBoundaries))
             output.append("\n")
             for entry in members[key] ?? [] {
                 output.append(elementLine(entry))
@@ -436,7 +476,7 @@ public enum OutlineFormatter {
         return output
     }
 
-    private static func regionHeader(_ key: RegionKey, screenHeight: Int) -> String {
+    private static func regionHeader(_ key: RegionKey, screenHeight: Int, sideBoundaries: [String: Int]) -> String {
         // Without a valid screen height (--point subtree) the y-band
         // numbers are meaningless, so we drop the `y=...` suffix and
         // just show the kind — this path only emits `Content` today
@@ -457,6 +497,10 @@ public enum OutlineFormatter {
                 return "[Bottom  y>=\(max(yBandInset, screenHeight - yBandInset))]"
             }
             return "[Bottom]"
+        case OutlineSideBars.Edge.leading.rawValue where key.label == nil:
+            return sideBoundaries[key.kind].map { "[Leading  x<=\($0)]" } ?? "[Leading]"
+        case OutlineSideBars.Edge.trailing.rawValue where key.label == nil:
+            return sideBoundaries[key.kind].map { "[Trailing  x>=\($0)]" } ?? "[Trailing]"
         default:
             if let label = key.label {
                 return "[\(key.kind)  \"\(escape(label))\"]"

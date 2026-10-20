@@ -67,9 +67,10 @@ Multiple selector styles for different needs:
 | `--label` | `tap --label "General"` | Scripted flows with `--wait-timeout` |
 | `-x -y` / `--point` | `tap --point 100,200` | Last resort — no AX data |
 
-AX-derived selectors work in any orientation — sim-use self-calibrates the
-current rotation on each command (iOS). Explicit `-x/-y`/`--point` is
-interpreted in the device-native portrait space.
+Selectors and explicit coordinates work in any orientation — on iOS,
+sim-use self-calibrates the current rotation on each command, so `-x/-y` /
+`--point` take the numbers `ui` prints. `--coordinate-space native` gives
+them in the device's native portrait points instead.
 
 
 ## Why sim-use
@@ -124,28 +125,50 @@ Device Hub is open — the HID transport is selected automatically per
 boot. Note that Xcode 27 no longer bundles Simulator.app; the one from an
 Xcode 26.x install still works, as does Device Hub itself.
 
-**Resize Mode is detected, not driven.** Xcode 27 can put an iOS 27+
-simulator into a *resizable app session* (Device Hub's resize button, or
-`xcrun devicectl device appResize start`), which moves the frontmost app
-onto a virtual `Resizable` display at an arbitrary size while the main
-display keeps only the wallpaper. Simulator touch input, the framebuffer
-and the accessibility hit-test all stay bound to the main display, so
-during a session sim-use refuses `tap`, `long-press`, `swipe`, `touch`,
-`gesture`, `multi-touch` and touch-bearing `batch` runs with an
-explanation (a tap would otherwise report success and deliver nothing),
-refuses `record-video` and `stream-video` (they capture only the main
-display; the hint gives the `simctl io … recordVideo --display=` form),
-redirects `screenshot` to the `Resizable` display, and tags `ui` with a
-`resizable_app_session` advisory. `ui` itself, `type`, Cmd+V `paste` and
-the key verbs keep working; `paste --via-menu` is a touch path and is
-refused like the touch verbs. The detection is one `devicectl device info
-appResize` per device per 5 s, refreshed early the first time `ui` sees a
-scene size that is not a device size (a batch re-checks before every
-touch step); `SIM_USE_RESIZE_SESSION_CHECK=0` turns it off (read by the
-per-device daemon when it starts). The bundled skill's preflight requires
-sim-use 0.15.0 or newer for this reason. Background:
-[issue #143](https://github.com/lycorp-jp/sim-use/issues/143) and
-`docs/ai/009-resizable-app-session/000-investigation.md`.
+**Resize Mode and the iPhone Duo inner display are driven.** Xcode 27 can
+put an iOS 27+ simulator into a *resizable app session* (Device Hub's
+resize button, or `xcrun devicectl device appResize start`), which moves
+the frontmost app onto a virtual `Resizable` display at an arbitrary
+size. Xcode 27.1's iPhone Duo has two integrated displays: the cover
+display (primary, active when folded) and the inner display (active when
+unfolded). sim-use reads the displays from `xcrun devicectl device info
+displays` and routes everything to the display that hosts the app: touch
+input (`tap`, `long-press`, `swipe`, `touch`, `gesture`, `multi-touch`,
+`batch`) goes to that display's digitizer, accessibility hit-tests
+(`ui --point`, collapsed-children recovery) run on it, and `screenshot`
+captures it. The `ui` header names it (`App: Settings  951x669
+(landscape-left, display LCD-1)`, `(display Resizable 560x874)`) and
+`--json` carries a `display` object; neither appears on the main display.
+On a display other than the main one the orientation comes from
+CoreDevice instead of hit-test probes. `record-video` and `stream-video`
+(`h264`, `bgra`) capture that display too — the inner panel in its native
+portrait orientation, like the main display; a Resize Mode scene cut from
+its canvas. A fold during a recording keeps the display it started on and
+says so at the end. The screenshot-based `stream-video` formats read the
+main display only and refuse there. Explicit `-x/-y` / `--point` coordinates are the numbers `ui`
+prints there too; with `--coordinate-space native` they are native to the
+display that hosts the app (the inner panel's unrotated points; a Resize
+Mode scene's points). `sim-use ios fold closed|open|half|<degrees>` folds and unfolds the
+Duo and confirms which display became active; `sim-use ios fold` alone
+reports the posture.
+
+An app whose scene is smaller than its display — an iOS 27.0 SDK app keeps
+out of the iPhone Duo's status bar strip, an older SDK app runs centred on
+the inner display — is placed by a few hit-test probes, so taps land on
+it in every orientation.
+
+The display list costs one ~0.1 s `devicectl` query per daemon on a
+single-display simulator and at most one every 2 s on a multi-display
+one; the Resize Mode check is one `devicectl device info appResize` per
+device per 5 s. A `ui` (or a selector tap) whose accessibility root
+changed size re-reads both at once — after a fold, or when a session
+starts or ends. A raw `-x/-y` tap right after such a change, with no
+`ui` in between, can still see the previous answer for that long.
+`SIM_USE_DISPLAY_TOPOLOGY_CHECK=0` and `SIM_USE_RESIZE_SESSION_CHECK=0`
+turn the checks off (read by the per-device daemon when it starts).
+Background: [issue #143](https://github.com/lycorp-jp/sim-use/issues/143),
+`docs/ai/009-resizable-app-session/000-investigation.md` and
+`docs/ai/010-display-routing/000-plan.md`.
 
 ### Linux (Android only)
 
@@ -188,7 +211,7 @@ For Android, run `sim-use android init --device <serial>` once to install the br
 All device-scoped commands accept `--device <ID>` (optional when only one simulator is booted). Three command layers:
 
   * **Top-level** — cross-platform verbs: `ui`, `tap`, `long-press`, `swipe`, `touch`, `multi-touch`, `type`, `paste`, `button`, `gesture`, `keyboard-state`, `screenshot`, `record-video`, `stream-video`, `app-state`. Same flags on iOS and Android; physical iOS devices route through `ui`, `tap` and `screenshot` only (the rest reject with the reason — see the [capability matrix](#physical-ios-devices)).
-  * **`sim-use ios <verb>`** — iOS-Simulator-only: `key`, `key-combo`, `key-sequence`, `batch`.
+  * **`sim-use ios <verb>`** — iOS-Simulator-only: `key`, `key-combo`, `key-sequence`, `batch`, `rotate`, `fold`.
   * **`sim-use android <verb>`** — Android-only: `init`, `devices`, `ping`, `scroll`.
   * **`sim-use ios-device <verb>`** — physical-iOS-only: `devices`, `ui`, `screenshot`, `tap` (experimental). Peer of `ios`/`android`; also accepts ECIDs and the hierarchy tuning flags the top level doesn't carry.
 
@@ -229,7 +252,7 @@ sim-use gesture scroll-down --pre-delay 0.5 --post-delay 1.0 --device $UDID
 
 `--pre-delay` / `--post-delay` / `--duration` work on `tap`, `swipe`, and `gesture` alike for coarse timing control.
 
-Single-finger presets (`scroll-*`, `swipe-from-*-edge`) name **visual** directions and are orientation-aware on iOS: their canvas size and rotation are auto-detected per command, so `scroll-up` scrolls the on-screen content up whether the device is portrait, landscape, or upside-down. Explicit `swipe`/`touch` coordinates remain device-native portrait space by default; pass `--coordinate-space ui` to give them in the visual space `ui` prints instead (orientation-calibrated per command; `touch` supports this in the atomic `--down --up` form only). Pinch/rotate presets remain untransformed. On Android the flag is accepted and ignored — display coordinates already rotate with the UI.
+Single-finger presets (`scroll-*`, `swipe-from-*-edge`) name **visual** directions and are orientation-aware on iOS: their canvas size and rotation are auto-detected per command, so `scroll-up` scrolls the on-screen content up whether the device is portrait, landscape, or upside-down. Explicit `tap`/`swipe`/`touch`/`multi-touch` coordinates, `paste --via-menu --target-x/--target-y` and the pinch/rotate `--center-x/--center-y` are in the same visual space `ui` prints (orientation-calibrated per command; the split `touch --down` / `--up` form calibrates each half). `--coordinate-space native` gives them in the device's native portrait points, as before 0.16.0. Calibration reuses the last `ui` snapshot when it can, so it costs a few milliseconds; with no snapshot it reads the tree once. On Android the flag is accepted and ignored — display coordinates already rotate with the UI.
 
 ### Text input
 
@@ -326,6 +349,35 @@ Key semantics:
 - Fail-fast by default; `--continue-on-error` switches to best-effort.
 - `--wait-timeout <seconds>` makes selector taps poll for the element to appear — primary mechanism for multi-screen flows.
 - `--ax-cache perBatch` (default) reuses one AX snapshot for the whole run; `--ax-cache perStep` refreshes between steps when the UI changes; `--ax-cache none` disables snapshot reuse entirely. `--wait-timeout` polling always refetches.
+
+### Rotation and folding (iOS-only)
+
+`rotate` takes the interface orientation the `ui` header prints and turns
+the device until the display that hosts the app shows it, then reads the
+result back from CoreDevice. It works on every iOS simulator (iPhone, iPad,
+iPhone Duo). An app that does not accept the orientation — a portrait-only
+app, SpringBoard on iPhone, `portrait-upside-down` on an iPhone-size screen
+— keeps its orientation, and the command reports that with an advisory
+(`--json`: `rotate.confirmed: false`) instead of failing.
+
+```bash
+sim-use ios rotate landscape-left --device $UDID      # portrait | landscape-left | landscape-right | portrait-upside-down
+sim-use ios fold open --device $UDID                  # iPhone Duo: inner display
+sim-use ios fold closed --device $UDID                # iPhone Duo: cover display
+sim-use ios fold 90 --json --device $UDID             # any hinge angle; reports the display it observed
+sim-use ios fold --device $UDID                       # report the posture only
+```
+
+Both verbs change the screen geometry, so they clear the cached `ui`
+snapshot: run `ui` again before `tap @N`. A fold also wakes a locked device
+to its lock screen. Single-display simulators rotate through a GSEvent
+sent to SpringBoard; the iPhone Duo rotates and folds through the
+vendor-defined HID reports that Device Hub's posture controls send.
+Device Hub does not need to be running: the reports go to the simulator's
+`dtuhidd`, which starts on demand. With Device Hub closed, sim-use also
+starts `dtuhidd` itself when touch input must reach the inner display or a
+Resize Mode scene, and rebuilds its HID connection once `dtuhidd` runs (an
+active `dtuhidd` disables the legacy keyboard path).
 
 ### Screenshot
 
@@ -448,7 +500,7 @@ sim-use ui --point 100,200 --device $UDID      # specific point (same UI space a
 
 The `--json` envelope carries the raw accessibility tree under `data.raw` by default; `--no-raw` drops it while keeping `outline` / `entries` / `lists` intact — prefer it in agent loops where the raw tree is only debugging ballast.
 
-The outline uses region banding (`[Top]` / `[Content]` / `[Bottom]` / declared `Group` regions) and `@N` / `#N` / `#N@M` / `#<id>` alias addressing. When the device is rotated, the `App:` header carries an orientation tag (e.g. `(landscape-right)`) and the `--json` envelope an `orientation` field.
+The outline uses region banding (`[Top]` / `[Content]` / `[Bottom]` / declared `Group` regions; on an iPhone Duo, `[Trailing  x>=N]` / `[Leading  x<=N]` for the vertical bar of an iOS 27.1 SDK app) and `@N` / `#N` / `#N@M` / `#<id>` alias addressing. When the device is rotated, the `App:` header carries an orientation tag (e.g. `(landscape-right)`) and the `--json` envelope an `orientation` field.
 
 A list cluster detector runs on every snapshot and attaches `#N` aliases to detected list cells — outline lines render as `@N #M` (dominant list) or `@N #M@S` (scope `S>1`). The `--json` envelope adds a `lists` array (one summary per cluster, ordered by detector score, dominant first) and per-cell membership under `entries[*].aliases.list`.
 
