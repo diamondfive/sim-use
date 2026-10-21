@@ -7,38 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-10-21
+
 Control the iPhone Duo's inner and cover displays and apps in Xcode Resize Mode, with new fold and rotation commands. iOS coordinates now match the `ui` outline by default; scripts that use device-native portrait coordinates must add `--coordinate-space native`. Unicode paste works again with Simulator.app and Device Hub, with safeguards against duplicate or misplaced input.
 
 ### Added
 
-- iOS: interact with apps on the iPhone Duo's inner display or in Xcode Resize Mode. Touches, UI queries and screenshots follow the app's display, including after rotation; the bundled skill now requires sim-use 0.16.0.
-- `sim-use ios fold closed|open|half|<degrees>` folds or unfolds an iPhone Duo simulator. Run it without an argument to read the current posture; `open` and `closed` confirm that the expected display becomes active.
-- `sim-use ios rotate <orientation>` rotates a simulator and reports whether the app accepted the change. Fold and rotation commands clear old `@N` references so they cannot target the previous layout.
-- iOS: record and stream the app's display on an unfolded iPhone Duo or in Resize Mode with `record-video` and `stream-video --format h264|bgra`. Capture stays on its starting display and warns if the app moves or resizes; older screenshot-based stream formats still require the main display.
-- iOS: the `ui` outline groups vertical navigation and tab bars into `Leading` or `Trailing` regions on iPhone Duo apps built with the iOS 27.1 SDK, making controls easier to find.
+- iOS: interact with apps on the iPhone Duo's inner display or in Xcode Resize Mode. Touches, UI queries and screenshots follow the app's display, including after rotation; the bundled skill now requires sim-use 0.16.0. (#157, #158, #164, #165, #170)
+- `sim-use ios fold closed|open|half|<degrees>` folds or unfolds an iPhone Duo simulator. Run it without an argument to read the current posture; `open` and `closed` confirm that the expected display becomes active. (#157, #165)
+- `sim-use ios rotate <orientation>` rotates a simulator and reports whether the app accepted the change. Fold and rotation commands clear old `@N` references so they cannot target the previous layout. (#157, #165)
+- iOS: record and stream the app's display on an unfolded iPhone Duo or in Resize Mode with `record-video` and `stream-video --format h264|bgra`. Capture stays on its starting display and warns if the app moves or resizes; older screenshot-based stream formats still require the main display. (#164, #165)
+- iOS: the `ui` outline groups vertical navigation and tab bars into `Leading` or `Trailing` regions on iPhone Duo apps built with the iOS 27.1 SDK, making controls easier to find. (#163, #169, #171)
 
 ### Changed
 
-- **Breaking — iOS coordinates now use the same space as the `ui` outline.** Taps, swipes, touches, multi-touch, gesture geometry, menu-paste targets and batch steps follow this default. Add `--coordinate-space native` if your scripts use device-native portrait points; the flag is not valid with selectors, aliases or directional gesture presets.
-- iOS: touch commands and menu-based paste now work in Xcode Resize Mode instead of refusing to run. The outline identifies the resized display, and commands return to the main display when the session ends. (#143)
-- iOS: `ui`, `ios fold` and `ios rotate` call the iPhone Duo's screens `inner display` and `cover display`, rather than showing system names. Raw display names in JSON are unchanged.
-- iOS: when screen probes cannot confirm orientation, commands use the rotation reported by the simulator instead of guessing or showing an unnecessary warning.
-- iOS: `ui --point` now checks the app's current layout before identifying a control. The first query after Resize Mode starts describes the app rather than the home screen, at the cost of an extra UI read.
+- **Breaking — iOS coordinates now use the same space as the `ui` outline.** Taps, swipes, touches, multi-touch, gesture geometry, menu-paste targets and batch steps follow this default. Add `--coordinate-space native` if your scripts use device-native portrait points; the flag is not valid with selectors, aliases or directional gesture presets. (#161, #163)
+- iOS: touch commands and menu-based paste now work in Xcode Resize Mode instead of refusing to run. The outline identifies the resized display, and commands return to the main display when the session ends. (#143, #158, #164, #165 — thanks @iXerol!)
+- iOS: `ui`, `ios fold` and `ios rotate` call the iPhone Duo's screens `inner display` and `cover display`, rather than showing system names. Raw display names in JSON are unchanged. (#170)
+- iOS: when screen probes cannot confirm orientation, commands use the rotation reported by the simulator instead of guessing or showing an unnecessary warning. (#158)
+- iOS: `ui --point` now checks the app's current layout before identifying a control. The first query after Resize Mode starts describes the app rather than the home screen, at the cost of an extra UI read. (#158)
 
 ### Fixed
 
-- iOS: Unicode `paste` works again with Simulator.app and Device Hub in either keyboard mode, preserving the caret and selection. `--replace` waits for Select All before pasting; shared clipboard sync can still affect the Mac and other devices.
-- iOS: menu-based paste no longer retries after a potentially delivered action or taps unrelated app controls. Replacement requires a confirmed selection or an empty field, and localized Paste and Select All menus are recognized, including Russian and Portuguese.
-- iOS: a failed batch no longer automatically repeats completed steps, which could paste text twice. Check the completed steps before retrying a failed batch yourself.
-- iOS: batch paste steps now use the same clipboard checks and safe replacement as standalone paste, including `--via-menu`. Text starting with `-` is preserved, and a step cannot change the batch's target device.
-- iOS: typing and keyboard commands keep working after folding or rotating an iPhone Duo with Device Hub closed. Touches on the inner display or in Resize Mode also work without opening Device Hub first.
-- iOS: pinch and rotate gestures in `ios batch` now perform the requested two-finger gesture and honor its settings, rather than sending a single-finger swipe.
-- Physical iOS: `ui` and `tap` briefly retry when an app's UI is not ready just after launch, instead of immediately suggesting that the device is locked or the app lacks development permissions. (#110)
-- iOS: the outline recognizes iPhone Duo side bars beside narrow cards or small content elements, rather than mixing navigation controls into the content.
-- iOS: content that extends beyond its pane no longer hides an iPhone Duo side bar from the outline or gets grouped into that bar.
-- iOS: a failed `ui` read now explains that the app's UI could not be read and gives recovery advice, including how to restart the simulator's accessibility service when it stops responding.
-- iOS: `stream-video --format bgra` produces correctly sized pixel frames on displays such as the iPhone Duo cover, including with `--scale`, so raw-video players can decode them.
-- Viewer: errors and recovery hints are no longer lost when a command exits immediately.
+- iOS: Unicode `paste` works again with Simulator.app and Device Hub in either keyboard mode, preserving the caret and selection. `--replace` waits for Select All before pasting; shared clipboard sync can still affect the Mac and other devices. (#172)
+- iOS: menu-based paste no longer retries after a potentially delivered action or taps unrelated app controls. Replacement requires a confirmed selection or an empty field, and localized Paste and Select All menus are recognized, including Russian and Portuguese. (#172)
+- iOS: a failed batch no longer automatically repeats completed steps, which could paste text twice. Check the completed steps before retrying a failed batch yourself. (#172)
+- iOS: batch paste steps now use the same clipboard checks and safe replacement as standalone paste, including `--via-menu`. Text starting with `-` is preserved, and a step cannot change the batch's target device. (#172)
+- iOS: typing and keyboard commands keep working after folding or rotating an iPhone Duo with Device Hub closed. Touches on the inner display or in Resize Mode also work without opening Device Hub first. (#165)
+- iOS: pinch and rotate gestures in `ios batch` now perform the requested two-finger gesture and honor its settings, rather than sending a single-finger swipe. (#161, #163)
+- Physical iOS: `ui` and `tap` briefly retry when an app's UI is not ready just after launch, instead of immediately suggesting that the device is locked or the app lacks development permissions. (#110, #156 — thanks @mvanhorn!)
+- iOS: the outline recognizes iPhone Duo side bars beside narrow cards or small content elements, rather than mixing navigation controls into the content. (#171)
+- iOS: content that extends beyond its pane no longer hides an iPhone Duo side bar from the outline or gets grouped into that bar. (#169)
+- iOS: a failed `ui` read now explains that the app's UI could not be read and gives recovery advice, including how to restart the simulator's accessibility service when it stops responding. (#168)
+- iOS: `stream-video --format bgra` produces correctly sized pixel frames on displays such as the iPhone Duo cover, including with `--scale`, so raw-video players can decode them. (#164, #165)
+- Viewer: errors and recovery hints are no longer lost when a command exits immediately. (#165)
 
 ## [0.15.0] - 2026-10-14
 
