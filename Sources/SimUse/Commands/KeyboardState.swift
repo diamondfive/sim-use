@@ -23,10 +23,8 @@ struct KeyboardState: SimUseExecutableCommand {
         abstract: "Report whether the on-screen software keyboard is currently visible.",
         discussion: """
         Inspects the frontmost app's accessibility tree for characteristic
-        software-keyboard buttons. Useful when an automation script needs
-        to pick between the default Cmd+V paste path (requires a connected
-        hardware keyboard) and the `sim-use paste --via-menu` touch path
-        (works regardless of the hardware-keyboard toggle).
+        software-keyboard buttons. Use this for keyboard-dependent UI checks.
+        Paste works in either keyboard mode and needs no visibility probe.
 
         Text output:
           soft     # software keyboard visible

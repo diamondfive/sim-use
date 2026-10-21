@@ -32,7 +32,9 @@ public struct IOSSimBatchCommand: SimUseExecutableCommand {
         abstract: "Execute ordered interaction steps using one iOS simulator/HID session.",
         discussion: """
         Batch executes multiple interaction steps in one command to reduce overhead.
-        Steps are executed in order.
+        Steps are executed in order. A transient boot-readiness failure does
+        not automatically replay the batch: earlier steps may have completed.
+        Inspect the UI before an explicit retry, including with --continue-on-error.
 
         Supported step commands:
           tap, swipe, gesture, touch, type, paste, button, key, key-sequence, key-combo
@@ -41,8 +43,9 @@ public struct IOSSimBatchCommand: SimUseExecutableCommand {
           sleep <seconds>
 
         Notes on `paste` inside batch:
-          * Default Cmd+V path only — `--via-menu` is not supported as a
-            batch step. Run `sim-use paste --via-menu` standalone instead.
+          * Uses the standalone verified clipboard and native menu path.
+            Default, --replace and targeted --via-menu forms are supported.
+            Focus the field first, or supply a --via-menu target.
           * `--stdin` is rejected. Pass text inline (`paste 'hello'`) or
             via `--file <path>`.
 
@@ -119,6 +122,7 @@ public struct IOSSimBatchCommand: SimUseExecutableCommand {
     }
 
     public var simulatorUDIDForDaemon: String? { device.resolved }
+    public var daemonAllowsTransientRetry: Bool { false }
 
     // The daemon runs with stdin on /dev/null (LINEIOS-216940) and in its
     // own working directory, so `--stdin` and a relative `--file` cannot

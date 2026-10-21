@@ -18,67 +18,22 @@ struct Paste: SimUseExecutableCommand {
     typealias ExecutionResult = IOSSimPasteCommand.ExecutionResult
 
     static let configuration = CommandConfiguration(
-        abstract: "Paste text into the focused field via the simulator pasteboard (bypasses IME).",
-        discussion: """
-        Writes the text to the simulator pasteboard with `simctl pbcopy` and
-        triggers Cmd+V. Characters reach the responder chain without going
-        through the keyboard, so IME composition (e.g. Japanese kana) cannot
-        munge ASCII input and arbitrary Unicode is safe.
-
-        Two input delivery paths:
-
-        1. DEFAULT (Cmd+V via HID) — fast, requires a **connected hardware
-           keyboard** on the simulator (Simulator.app: I/O > Keyboard >
-           Connect Hardware Keyboard = ON). Under soft-keyboard-only mode
-           HID key events are dropped and the paste silently no-ops.
-
-        2. --via-menu (touch-driven) — long-press on a target field and
-           tap the iOS edit-menu "Paste" button. Works regardless of the
-           hardware-keyboard toggle, because no key events are involved.
-           Requires --target-id <AXUniqueId> or --target-x/--target-y so
-           sim-use knows where to long-press. --replace additionally taps
-           "Select All" first.
-
-        Preconditions (default path):
-        • Target field must already be focused (use `sim-use tap` first).
-        • Hardware keyboard must be connected on the simulator.
-
-        Preconditions (--via-menu path):
-        • Target field must be able to receive a long-press (normal
-          UITextField / UITextView). Focus is not required — the
-          long-press itself focuses the field.
-
-        Input Methods (mutually exclusive):
-        1. Positional: sim-use paste "Hello 日本語" --udid UDID
-        2. From stdin: echo -n "text" | sim-use paste --stdin --udid UDID
-        3. From file:  sim-use paste --file input.txt --udid UDID
+        abstract: "Paste UTF-8 text into an editable field (bypasses IME).",
+        discussion: IOSSimPasteCommand.configuration.discussion + "\n\n" + """
+        Input methods (mutually exclusive):
+          sim-use paste "Hello 日本語" --device UDID
+          printf '%s' "$TEXT" | sim-use paste --stdin --device UDID
+          sim-use paste --file input.txt --device UDID
 
         Examples:
-          # Default Cmd+V path
-          sim-use tap --id chatTextField --udid UDID
-          sim-use paste "ABC 123" --udid UDID                       # paste at caret
-          sim-use paste "NEW" --replace --udid UDID                 # Cmd+A + paste
+          sim-use tap --id chatTextField --device UDID
+          sim-use paste "ABC 日本語" --device UDID
+          sim-use paste "NEW" --replace --device UDID
+          sim-use paste "ABC" --via-menu --target-id chatTextField --device UDID
 
-          # Soft-keyboard-friendly path
-          sim-use paste "ABC 123" --via-menu --target-id chatTextField --udid UDID
-          sim-use paste "NEW"    --replace --via-menu --target-id chatTextField --udid UDID
-          sim-use paste "xy"     --via-menu --target-x 171 --target-y 513 --udid UDID
-          printf '%s' "$CLIP" | sim-use paste --stdin --udid UDID
-
-        iOS Pasteboard Privacy Prompt (iOS 16+):
-        • First paste in an app session triggers either a modal "Allow Paste"
-          dialog (iOS 16) or an inline Paste bubble above the keyboard
-          (iOS 17+). Approving grants a ~60 s grace window for subsequent
-          pastes in the same session. `sim-use paste` does not auto-dismiss the
-          prompt — accept it once interactively, or pre-configure the
-          per-app Settings > Paste from Other Apps toggle.
-
-        Caveats:
-        • Overwrites the simulator pasteboard.
-        • Secure text entry fields (passwords) may disable programmatic paste;
-          fall back to `sim-use type` for ASCII-only credentials.
-        • Verify the result with `describe-ui --json | jq '.AXValue'` on most
-          UIKit fields; custom controls may not reflect AXValue.
+        Android uses the bridge's ACTION_PASTE; --via-menu is iOS-only.
+        Physical iOS devices have no text-input channel yet.
+        Always verify the resulting field with `sim-use ui`.
         """
     )
 
@@ -91,10 +46,10 @@ struct Paste: SimUseExecutableCommand {
     @Option(name: .customLong("file"), help: "Read text from the specified file.")
     var inputFile: String?
 
-    @Flag(name: .customLong("replace"), help: "Select all before pasting so the paste replaces the field's current content. Uses Cmd+A in the default path and 'Select All' in the menu path.")
+    @Flag(name: .customLong("replace"), help: "Select all before pasting to replace the field's current content.")
     var replace: Bool = false
 
-    @Flag(name: .customLong("via-menu"), help: "Use the iOS edit menu (long-press → tap Paste) instead of Cmd+V. Touch-only path, works with the soft keyboard showing or hardware keyboard disconnected. Requires --target-id or --target-x/y.")
+    @Flag(name: .customLong("via-menu"), help: "Long-press an explicit iOS target before native menu Paste. Requires --target-id or --target-x/y; neither mode requires a connected hardware keyboard.")
     var viaMenu: Bool = false
 
     @Option(name: .customLong("target-id"), help: "For --via-menu: AXUniqueId of the field to long-press. Resolves via the live AX tree.")
@@ -112,7 +67,7 @@ struct Paste: SimUseExecutableCommand {
     @Option(name: .customLong("long-press-duration"), help: "Seconds to hold on the field for the edit menu to appear (default: 0.8).")
     var longPressDuration: Double = 0.8
 
-    @Option(name: .customLong("menu-timeout"), help: "Seconds to poll for the edit menu after long-press (default: 2.0).")
+    @Option(name: .customLong("menu-timeout"), help: "Seconds to wait for each edit-menu transition (default: 2.0).")
     var menuTimeout: Double = 2.0
 
     @OptionGroup var device: DeviceOptions
@@ -139,22 +94,9 @@ struct Paste: SimUseExecutableCommand {
             viaMenu: viaMenu,
             targetID: targetID,
             targetX: targetX, targetY: targetY,
-            coordinateSpace: coordinateSpace
+            coordinateSpace: coordinateSpace,
+            longPressDuration: longPressDuration, menuTimeout: menuTimeout
         )
-    }
-
-    func clientPreflight() async {
-        // Simulator-only soft-keyboard probe — Android goes through
-        // ACTION_PASTE, and physical iOS rejects in execute() before
-        // any simulator machinery could apply. Keyed off the same
-        // routing decision as execute() (`.none` falls through to the
-        // iOS backend there, so it keeps the probe).
-        switch PlatformRouter.resolve(udid: device.resolved) {
-        case .android, .iOSDevice:
-            return
-        case .iOSSim, .none:
-            await makeIOSSubcommand().clientPreflight()
-        }
     }
 
     func execute() async throws -> ExecutionResult {

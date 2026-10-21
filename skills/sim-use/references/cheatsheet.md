@@ -49,12 +49,13 @@ sim-use tap --label 'OK' --frame 'minX=200,maxX=400,minY=600,maxY=700'
 ```bash
 sim-use type 'Hello World!'                    # HID keyboard (ASCII)
 echo "complex text" | sim-use type --stdin     # stdin for special chars
-sim-use paste 'こんにちは 🎉'                    # pasteboard + Cmd+V (iOS)
-sim-use paste 'text' --replace                  # Cmd+A then paste
-sim-use paste 'text' --via-menu --target-id <id>  # iOS edit menu (soft keyboard)
+sim-use paste 'こんにちは 🎉'                    # focused caret/selection; either iOS host
+sim-use paste 'text' --replace                  # Select All then native Paste
+sim-use paste 'text' --via-menu --target-id <id>  # explicit iOS target
+sim-use paste --file body.txt                   # UTF-8, including multiline text
 ```
 
-- iOS: `paste` needs hardware keyboard connected; use `--via-menu` for soft-keyboard-only.
+- iOS: both modes work with software or hardware keyboards. Default paste preserves the focused field's caret and selection; explicit targeting can move them. Native editing rules apply. Verify the field and avoid concurrent shared-clipboard writers.
 - Android: `paste` uses native `ACTION_PASTE`; `type` works for all unicode.
 
 ## Gestures and timing

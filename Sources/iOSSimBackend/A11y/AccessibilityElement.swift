@@ -28,6 +28,8 @@ public struct AccessibilityElement: Decodable {
     public let frame: Frame?
     public let children: [AccessibilityElement]?
     public let enabled: Bool?
+    /// Existing AX trait names, including TextEntry and IsEditing.
+    public let traits: [String]?
     /// Process identifier emitted by the AX serializer on every element.
     /// On the Application root this is the foreground app's pid; the
     /// `BundleIdentifierResolver` maps it back to `CFBundleIdentifier`.
@@ -49,6 +51,7 @@ public struct AccessibilityElement: Decodable {
         case frame
         case children
         case enabled
+        case traits
         case pid
         case AXLabel
         case AXUniqueId
@@ -61,6 +64,7 @@ public struct AccessibilityElement: Decodable {
         frame = try container.decodeIfPresent(Frame.self, forKey: .frame)
         children = try container.decodeIfPresent([AccessibilityElement].self, forKey: .children)
         enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled)
+        traits = try container.decodeIfPresent([String].self, forKey: .traits)
         pid = try container.decodeIfPresent(Int.self, forKey: .pid)
         AXLabel = try container.decodeIfPresent(String.self, forKey: .AXLabel)
         AXUniqueId = try container.decodeIfPresent(String.self, forKey: .AXUniqueId)

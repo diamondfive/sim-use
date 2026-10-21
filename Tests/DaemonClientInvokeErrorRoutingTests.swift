@@ -78,6 +78,102 @@ private struct FakeFlakyCommand: SimUseExecutableCommand {
     func format(_ result: Payload) -> CommandOutput { .line(result.value) }
 }
 
+@MainActor
+private enum FakePasteState {
+    static var executions = 0
+    static var actions: [String] = []
+    static var failDuringSend = false
+}
+
+private struct FakePasteCompletionCommand: SimUseExecutableCommand {
+    static let configuration = CommandConfiguration(commandName: "fake-paste-completion")
+    var jsonOutput: Bool { false }
+
+    @MainActor
+    func execute() async throws -> FakeFlakyCommand.Payload {
+        FakePasteState.executions += 1
+        try await PasteDelivery.perform(
+            send: {
+                FakePasteState.actions.append("Paste")
+                if FakePasteState.failDuringSend {
+                    throw CLIError(errorDescription: "No translation object returned for simulator fixture")
+                }
+            },
+            waitForCompletion: {
+                throw CLIError(errorDescription: "No translation object returned for simulator fixture")
+            }
+        )
+        return .init(value: "ok")
+    }
+
+    func format(_ result: FakeFlakyCommand.Payload) -> CommandOutput { .line(result.value) }
+}
+
+@MainActor
+private enum FakeBatchReplayState {
+    static var executions = 0
+    static var actions: [String] = []
+    static var continueOnError = false
+}
+
+private struct FakeMultiStepBatchCommand: SimUseExecutableCommand {
+    static let configuration = CommandConfiguration(commandName: "fake-multi-step-batch")
+    var jsonOutput: Bool { false }
+    var daemonAllowsTransientRetry: Bool { IOSSimBatchCommand().daemonAllowsTransientRetry }
+
+    @MainActor
+    func execute() async throws -> FakeFlakyCommand.Payload {
+        FakeBatchReplayState.executions += 1
+        let failThisExecution = FakeBatchReplayState.executions == 1
+        var failures: [String] = []
+        do {
+            try await PasteDelivery.perform(
+                send: { FakeBatchReplayState.actions.append("first Paste") },
+                waitForCompletion: {
+                    if failThisExecution && FakeBatchReplayState.continueOnError {
+                        throw CLIError(errorDescription: "No translation object returned for simulator fixture")
+                    }
+                }
+            )
+        } catch {
+            guard FakeBatchReplayState.continueOnError else { throw error }
+            failures.append("Step 1 failed: [paste] -> \(error.localizedDescription)")
+        }
+        if failThisExecution {
+            let message = "No translation object returned for simulator fixture"
+            if FakeBatchReplayState.continueOnError {
+                failures.append("Step 2 failed: [paste] -> \(message)")
+                throw CLIError(errorDescription: "Batch completed with \(failures.count) failure(s):\n\(failures.joined(separator: "\n"))")
+            }
+            throw CLIError(errorDescription: "Step 2 failed: [paste]\n\(message)")
+        }
+        try await PasteDelivery.perform(
+            send: { FakeBatchReplayState.actions.append("second Paste") }, waitForCompletion: {}
+        )
+        return .init(value: "ok")
+    }
+
+    func format(_ result: FakeFlakyCommand.Payload) -> CommandOutput { .line(result.value) }
+}
+
+private struct FakeHintedFailure: LocalizedError, HintProviding {
+    let errorDescription: String?
+    var hint: String? { "fixture: inspect completed steps" }
+}
+
+private struct FakeRetryOptOutCommand: SimUseExecutableCommand {
+    static let configuration = CommandConfiguration(commandName: "fake-retry-opt-out")
+    var jsonOutput: Bool { false }
+    var daemonAllowsTransientRetry: Bool { IOSSimBatchCommand().daemonAllowsTransientRetry }
+
+    @MainActor
+    func execute() async throws -> FakeFlakyCommand.Payload {
+        throw FakeHintedFailure(errorDescription: FakeCommandState.failureMessage)
+    }
+
+    func format(_ result: FakeFlakyCommand.Payload) -> CommandOutput { .line(result.value) }
+}
+
 // MARK: - Suite
 
 // Serialised for the same reason as `DaemonClientEnsureCompatibleDaemonTests`:
@@ -122,6 +218,111 @@ struct DaemonClientInvokeErrorRoutingTests {
     private struct SuccessEnvelope: Decodable {
         let ok: Bool
         let data: FakeFlakyCommand.Payload
+    }
+
+    @Test("A partial send or post-Paste AX failure never replays the request", arguments: ["paste", "batch"], [false, true])
+    func pasteCompletionDoesNotReplay(command: String, failDuringSend: Bool) async throws {
+        let tmp = try makeTempDirectory()
+        defer { removeTempDirectory(tmp) }
+        let udid = "TEST-PASTE-\(UUID().uuidString.prefix(8))"
+        let (paths, task) = try await startTestDaemon(udid: udid, baseDirectory: tmp)
+        defer { task.cancel() }
+        FakePasteState.executions = 0
+        FakePasteState.actions = []
+        FakePasteState.failDuringSend = failDuringSend
+        try await withParser({ _ in FakePasteCompletionCommand() }) {
+            do {
+                _ = try await DaemonClient.invoke(
+                    command: command, args: [], udid: udid,
+                    baseDirectory: tmp, transientRetryDelay: 0.01
+                )
+                Issue.record("Paste completion failure must be reported")
+            } catch let error as DaemonClientError {
+                guard case .remote(let message, let kind, _) = error else {
+                    Issue.record("expected remote error, got \(error)")
+                    return
+                }
+                #expect(kind == .other)
+                #expect(message.contains("Verify the field before retrying"))
+                #expect(!message.contains("No translation object"))
+            }
+        }
+        #expect(FakePasteState.executions == 1)
+        #expect(FakePasteState.actions == ["Paste"])
+        await DaemonClient.stopDaemon(paths: paths, timeout: 2)
+        _ = try? await task.value
+    }
+
+    @Test("A later batch failure never replays a completed or ambiguous Paste", arguments: [false, true])
+    func laterBatchFailureDoesNotReplay(continueOnError: Bool) async throws {
+        let tmp = try makeTempDirectory()
+        defer { removeTempDirectory(tmp) }
+        let udid = "TEST-BATCH-\(UUID().uuidString.prefix(8))"
+        let (paths, task) = try await startTestDaemon(udid: udid, baseDirectory: tmp)
+        defer { task.cancel() }
+        FakeBatchReplayState.executions = 0
+        FakeBatchReplayState.actions = []
+        FakeBatchReplayState.continueOnError = continueOnError
+        try await withParser({ _ in FakeMultiStepBatchCommand() }) {
+            do {
+                _ = try await DaemonClient.invoke(
+                    command: "batch", args: [], udid: udid,
+                    baseDirectory: tmp, transientRetryDelay: 0.01
+                )
+                Issue.record("A failed batch must not succeed after replay")
+            } catch let error as DaemonClientError {
+                guard case .remote(let message, let kind, _) = error else {
+                    Issue.record("expected remote error, got \(error)")
+                    return
+                }
+                #expect(kind == .permanent)
+                #expect(message.contains("No translation object returned for simulator"))
+                #expect(message.contains("Step 2 failed"))
+                if continueOnError {
+                    #expect(message.contains("Batch completed with 2 failure(s)"))
+                    #expect(message.contains("Verify the field before retrying"))
+                }
+            }
+        }
+        #expect(FakeBatchReplayState.executions == 1)
+        #expect(FakeBatchReplayState.actions == ["first Paste"])
+        await DaemonClient.stopDaemon(paths: paths, timeout: 2)
+        _ = try? await task.value
+    }
+
+    @Test("Parsed iOS batches opt out of transient request replay")
+    func batchRetryPolicy() throws {
+        let command = try IOSSimBatchCommand.parse(["--step", "paste first", "--step", "paste second"])
+        #expect(!command.daemonAllowsTransientRetry)
+    }
+
+    @Test("Retry opt-out preserves diagnostics, hints and stale cleanup", arguments: [
+        "No translation object returned for simulator fixture",
+        "Simulator with UDID fixture not found in set.",
+    ])
+    func optedOutFailureRouting(message: String) async throws {
+        FakeCommandState.reset(failures: 1, message: message)
+        try await withParser({ _ in FakeRetryOptOutCommand() }) {
+            let outcome = await DaemonDispatch.handle(
+                DaemonRequest(cmd: "batch", args: []),
+                snapshot: .init(pid: getpid(), startTime: Date(), udid: "TEST-RETRY-POLICY", simUseVersion: "fixture")
+            )
+            struct Failure: Decodable {
+                let kind: DaemonErrorKind
+                let error: String
+                let hint: String?
+            }
+            let failure = try JSONDecoder().decode(Failure.self, from: outcome.responseData)
+            #expect(failure.error.contains(message))
+            if message.contains("not found in set") {
+                #expect(failure.kind == .staleSimulator)
+                #expect(outcome.shouldStopDaemon)
+            } else {
+                #expect(failure.kind == .permanent)
+                #expect(failure.hint == "fixture: inspect completed steps")
+                #expect(!outcome.shouldStopDaemon)
+            }
+        }
     }
 
     @Test("Remote error surfaces verbatim without killing or respawning the live daemon")

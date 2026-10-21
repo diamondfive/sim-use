@@ -6,6 +6,13 @@
 | **Refs** | #154 (fix), #152 (found during the same release gate), issue #153 (related, open) |
 | **Shipped in** | 0.15.0 |
 
+> **2026-10-20 follow-up:** [011 Device Hub paste](../011-device-hub-paste/000-investigation.md)
+> isolates the clipboard failure mentioned below. CoreSimulatorBridge rejects
+> legacy snapshots while the CoreDevice pasteboard stack is active; the earlier
+> description of host text overwriting the write describes the observed result,
+> not the full mechanism. CoreDevice copy/readback plus targeted menu Paste was
+> verified. That clipboard issue is separate from this shipped HID-lifetime fix.
+
 ## Context
 
 The 0.15.0 release gate ran `make e2e-matrix`. On the x27-hub leg (Xcode 27.1

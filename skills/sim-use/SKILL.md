@@ -76,7 +76,7 @@ Every byte of command output you read costs context. Defaults that keep the loop
 |---|---|
 | Scroll down | `sim-use gesture scroll-up --device <UDID>` (scroll-up = content moves up = page down) |
 | Type text | `sim-use type 'hello' --device <UDID>` |
-| Paste unicode | `sim-use paste 'こんにちは 🎉' --device <UDID>` (iOS: needs hardware keyboard) |
+| Paste Unicode | Focus the field, then `sim-use paste 'こんにちは 🎉' --device <UDID>`; iOS works with Simulator.app or Device Hub, in either keyboard mode |
 | Hardware button | `sim-use button home --device <UDID>` |
 | Android back | `sim-use button back --device <UDID>` |
 | Wait for animation | `sleep 0.4` between commands, or `--pre-delay 0.5` |
@@ -87,6 +87,16 @@ Every byte of command output you read costs context. Defaults that keep the loop
 | Rotate the device (iOS) | `sim-use ios rotate landscape-left --device <UDID>` — interface names as the `App:` header prints them; re-run `ui` after |
 | Fold / unfold (iPhone Duo) | `sim-use ios fold closed\|open --device <UDID>`; `sim-use ios fold --device <UDID>` reports which display is active; re-run `ui` after |
 | Record evidence GIF | `sim-use record-video --output demo.gif --device <UDID>` — stop with SIGINT/SIGTERM (never SIGKILL); transcodes after stop; auto-plays inline in PRs; add `--gif-markers` for START/END loop-boundary cards |
+
+### Paste on iOS simulators
+
+Prefer `paste` for Unicode and IME-safe text. The default preserves the focused field's caret and selection. `--replace` selects all first. Use `--via-menu --target-id <id>` or `--target-x/--target-y` to focus a target explicitly. Both paths use the native Paste action; no hardware-keyboard or sync-setting change is needed.
+
+For multiline or shell-sensitive text, use `printf '%s' "$TEXT" | sim-use paste --stdin --device <UDID>` or `paste --file <path>`. The control's native rules still apply, including single-line normalization and smart-paste spaces. `--replace` fails before Paste if Select All is unavailable and the field is not confirmed empty through accessibility. Never treat that refusal as a successful replacement. Unknown or ambiguous menu provenance is also refused; do not bypass that refusal by tapping a same-label app button. Always verify the actual field. If the command reports that Paste may have been sent, check the field before retrying; it does not automatically resend Paste.
+
+Shared clipboard sync can also overwrite the Mac and other devices. Keep one clipboard writer active. sim-use serializes its own paste operations and checks for unexpected readback, but cannot prevent external writes. Never print unrelated clipboard data or restore an old backup over newer external content.
+
+Batch paste supports default, replacement, files and explicit menu targets; `paste --stdin` is not a batch step because stdin belongs to the batch. A failed batch is not automatically replayed after a transient boot-readiness error. Inspect the UI and completed steps before retrying, including with `--continue-on-error`.
 
 ### Physical iOS devices (experimental)
 
@@ -134,7 +144,7 @@ Quick symptom index — see `references/pitfalls.md` for detailed recipes.
 | `App:` line shows wrong app | System layer (alert, share sheet) is on top | Dismiss it first, then re-run `ui` |
 | `multipleMatches` error | Several elements share the selector | Use `--frame`, `--element-type`, or a more specific selector |
 | Tap lands but nothing happens | Animation in progress, or element not yet interactive | Add `--pre-delay 0.3` or `--wait-timeout 3` |
-| iOS: `paste` drops text | Soft keyboard only; HID Cmd+V is ignored | Use `paste --via-menu --target-id <id>` |
+| iOS: `paste` fails or text is missing | No focused field, a custom edit menu, a paste prompt, or an external clipboard writer | Focus the field, or use `paste --via-menu --target-id <id>`; inspect prompts and verify the actual field. Do not switch to `type` as a Unicode substitute |
 | Android: `paste` denied | Background clipboard access blocked | Use `type` instead |
 | Outline shows `U+FFFC` in label | iOS icon placeholder character | Match with `--label-regex` excluding the prefix |
 | `[i] … covers ~N% of the screen` warning (text output, or `--json` top-level `advisory` key) | The selector resolved to a near-full-screen wrapper (common on Flutter/canvas UIs) and the tap hit its center, likely missing the intended control | Re-run `ui` and target the control via `@N`/`#<id>`, or pass explicit `-x/-y`/`--point` |

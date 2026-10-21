@@ -270,38 +270,36 @@ sim-use type --file input.txt --device $UDID
 
 ### Paste (IME-safe Unicode)
 
-`sim-use paste` writes text to the simulator pasteboard (`simctl pbcopy`) and issues Cmd+V, so characters reach the focused field without going through the keyboard. This bypasses host IME composition (e.g. Japanese kana remapping ASCII keys) and accepts arbitrary Unicode the HID keycode table cannot express (CJK, emoji, diacritics).
+`sim-use paste` stages UTF-8 text, verifies exact clipboard readback and taps the native Paste action. On iOS, the standard HID Application key opens the focused field's edit menu without moving its caret or selection. This works with Simulator.app and Device Hub, with or without a connected hardware keyboard. It bypasses IME composition and supports CJK, emoji and diacritics without keyboard-layout substitution. Clipboard staging uses verified simctl when CoreDevice ownership is inactive, otherwise verified CoreDevice.
 
 ```bash
 sim-use paste 'ABC 日本語 🎉' --device $UDID             # at caret
-sim-use paste 'new content' --replace --device $UDID   # Cmd+A + paste
+sim-use paste 'new content' --replace --device $UDID   # Select All + Paste
 
 printf '%s' "$CONTENT" | sim-use paste --stdin --device $UDID
 sim-use paste --file body.txt --device $UDID
 ```
 
-The default Cmd+V path needs a connected hardware keyboard on the simulator (Simulator.app: I/O > Keyboard > Connect Hardware Keyboard = ON). Under soft-keyboard-only mode HID Cmd+V is dropped — switch to `--via-menu`, which long-presses the target and taps the iOS edit-menu "Paste" button:
+Focus the field first for default paste. To choose a field explicitly, use `--via-menu`: it long-presses an id or coordinates before invoking the edit menu. Both forms support `--replace`; neither changes keyboard or clipboard-sync preferences.
 
 ```bash
 sim-use paste 'ABC 日本語' --via-menu --target-id chatTextField --device $UDID
 sim-use paste 'at xy' --replace --via-menu --target-x 171 --target-y 513 --device $UDID
 ```
 
-iOS 16+ gates the first paste per app session behind an "Allow Paste" prompt (modal dialog on iOS 16, inline bubble on iOS 17+). sim-use does not auto-dismiss it — approve once interactively (iOS grants a ~60 s grace window for the session) or pre-configure Settings → Paste from Other Apps per app.
+The control must support the native edit menu. `--replace` requires Select All unless the focused control exposes an explicitly empty accessibility value; otherwise it fails before Paste instead of appending. Existing menus require native-menu provenance to distinguish them from app controls. Anonymous modal menus need a verified native dismissal control in the same container; ambiguous or unsupported structures are refused instead of tapping app buttons. Native smart-paste formatting, single-line normalization and paste permission prompts still apply; sim-use does not approve prompts automatically. Verify the resulting field with `sim-use ui`. If completion cannot be confirmed after sending Paste, the command reports an ambiguous result without retrying. Check the field before you retry.
+
+Clipboard sharing can also change the Mac and other devices' clipboards. sim-use holds a host-wide lock for its own paste operations and verifies the clipboard again before Paste, but cannot lock out external apps. Do not run other clipboard writers during a paste. Clipboard mismatch errors never include unexpected contents.
+
+`sim-use ios batch` supports the same default, `--replace`, `--file` and targeted `--via-menu` behavior. A paste step cannot use `--stdin`, which belongs to the batch input.
 
 ### Keyboard state
 
-Probe whether the software keyboard is visible. Primary use: pick between the `paste` Cmd+V default and `--via-menu` path.
+Probe whether the software keyboard is visible. This is useful for keyboard-dependent UI checks; paste does not require branching on this result.
 
 ```bash
-# Prints `soft` or `hidden` (both exit 0; non-zero = probe failure). Branch on stdout:
-if [[ "$(sim-use keyboard-state --device $UDID)" == soft ]]; then
-  sim-use paste "$TEXT" --via-menu --target-id chatTextField --device $UDID
-else
-  sim-use paste "$TEXT" --device $UDID
-fi
-
-sim-use keyboard-state --json --device $UDID   # -> {"ok":true,"data":{"visible":true, ...}}
+sim-use keyboard-state --device $UDID        # soft | hidden; non-zero means probe failure
+sim-use keyboard-state --json --device $UDID # {"ok":true,"data":{"visible":true, ...}}
 ```
 
 ### Hardware buttons
@@ -353,6 +351,7 @@ Key semantics:
 
 - Exactly one step source per run: `--step`, `--file`, or `--stdin`.
 - Fail-fast by default; `--continue-on-error` switches to best-effort.
+- A transient boot-readiness failure does not automatically replay the batch. Earlier steps may have completed, including when `--continue-on-error` reports multiple failures. Inspect the UI and completed steps before retrying.
 - `--wait-timeout <seconds>` makes selector taps poll for the element to appear — primary mechanism for multi-screen flows.
 - `--ax-cache perBatch` (default) reuses one AX snapshot for the whole run; `--ax-cache perStep` refreshes between steps when the UI changes; `--ax-cache none` disables snapshot reuse entirely. `--wait-timeout` polling always refetches.
 

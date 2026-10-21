@@ -8,6 +8,7 @@ Use this reference when generating or reviewing `sim-use ios batch` commands.
 - `gesture`
 - `touch`
 - `type`
+- `paste` (default, `--replace`, `--file`, or `--via-menu` with a target; not `--stdin`)
 - `button`
 - `key`
 - `key-sequence`
@@ -31,7 +32,15 @@ Use this reference when generating or reviewing `sim-use ios batch` commands.
 - Use exactly one source: `--step` OR `--file` OR `--stdin`.
 - Empty lines are ignored.
 - `#` comment lines are ignored in file/stdin input.
-- Do not pass `--device` inside step lines; keep it at batch command level.
+- Do not pass `--device` or `--udid` inside step lines; keep the target at batch command level.
+- A paste step runs after pending HID is flushed and uses the standalone verified clipboard and native menu path. Focus a field first, or use `--via-menu --target-id <id>` in the step. Clipboard sharing and native editing rules still apply.
+- Use `paste -- 'text starting with -'` for dash-prefixed text. The option terminator does not hide the batch-level target.
+
+## Failure and retry
+
+- A transient boot-readiness error does not automatically replay the batch.
+- Earlier steps may have completed before a later step failed. This also applies to errors collected by `--continue-on-error`.
+- Inspect the current UI and completed steps before an explicit retry. Do not repeat the whole batch without checking its side effects.
 
 ## Example: inline steps
 ```bash
