@@ -30,10 +30,10 @@ review round, or a later finding changes what the entry says. Look for an
 existing entry on the topic before you open a new one.
 
 **No record** is necessary for typo or formatting fixes, dependency bumps,
-test-only or fixture-only changes, small fixes that the commit message and
-`CHANGELOG.md` explain in full, reviews, and status reports. If you are not
-sure, ask: will someone later need the reasoning to change this code safely?
-If yes, write it down.
+test-only or fixture-only changes, small fixes that need no separate design
+record, reviews, and status reports. Keep changelog entries focused on user
+impact, not root-cause detail. If you are not sure, ask: will someone later
+need the reasoning to change this code safely? If yes, write it down.
 
 ## Workflow
 

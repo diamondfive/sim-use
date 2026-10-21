@@ -6,7 +6,14 @@
 - When adding or removing commands/options, update the README and `skills/sim-use/SKILL.md`. If the Skill starts relying on behavior newer than its current compatibility floor, also bump `MINIMUM_SIM_USE_VERSION` in `skills/sim-use/scripts/preflight.py` and extend `PreflightScriptTests`.
 
 ## Changelog
-`CHANGELOG.md` follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/). Add entries under `## [Unreleased]` as you land changes. Subsection order: `### Added` / `### Changed` / `### Fixed` / `### Removed`. Never modify already-released version sections.
+`CHANGELOG.md` is a release guide for tool users, not an implementation log. Follow [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+- Add changes under `## [Unreleased]`. Released headings use `## [x.y.z] - YYYY-MM-DD`; do not edit released sections unless the user explicitly asks.
+- Start each populated version, including Unreleased, with a 1–3 sentence summary. Assume the reader reads only this summary: name the main benefits and any required migration.
+- Use only non-empty subsections in this order: `### Added` / `### Changed` / `### Fixed` / `### Removed`. Put the most important changes first within each subsection.
+- Write each bullet in plain English, usually 1–2 short sentences and at most about 50 words. State what users can do now or what problem is solved. Name commands or flags when useful, but explain their benefit or required action too.
+- Combine related changes instead of listing every commit. Keep implementation details, investigation history and benchmark logs out of the changelog; use `docs/ai/` for technical reasoning and the README for usage details.
+- Keep PR references and contributor thanks with the relevant change, including when merging or rewriting entries. Do not lose credit to save space. Describe each version as it shipped, without importing later behavior.
 
 ## Design records (`docs/ai/`)
 sim-use uses AI-docs-driven development. Before a substantial feature, a contract change (daemon or bridge wire, `--json` envelope, skill compatibility floor) or a non-trivial root-cause fix, create `docs/ai/NNN-<slug>/000-plan.md` (`000-investigation.md` for a root-cause hunt) with the `write-ai-docs` skill. Record each decision when you make it, and write `001-action.md` after the work lands. Before you change code that an entry covers, read the entry. Index and layout: `docs/ai/README.md`.

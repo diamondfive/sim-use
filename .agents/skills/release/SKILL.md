@@ -51,12 +51,12 @@ Run these checks. Abort with a clear error if any fails.
    - `feat!:` / `BREAKING CHANGE` → major
    - `feat:` → minor
    - Only `fix:` / `chore:` / `docs:` → patch
-4. Draft CHANGELOG entry from commits. Group by: `### Added` / `### Changed` / `### Fixed` / `### Removed`. Omit pure refactor/chore/test commits. Match existing CHANGELOG style.
+4. Curate the existing `[Unreleased]` draft against the commits, following the **Changelog** rules in `AGENTS.md`. Write a 1–3 sentence summary that stands on its own, then short user-impact bullets under non-empty `Added` / `Changed` / `Fixed` / `Removed` subsections. Lead with the important changes in each subsection, explain migration steps, and combine related work. Omit pure refactor/chore/test commits; do not copy commit descriptions or implementation detail into release notes.
 5. **Backlink every entry to its pull request(s) and thank external contributors.** This is part of how the project builds its contributor community — never skip it.
    - Append the PR reference(s) at the end of each entry: ` (#NN)`. When the work arrived through an original PR plus an internal hardening/follow-up PR, reference both: ` (#NN, #MM)`.
    - When any referenced PR was authored by an external contributor (not the maintainer), turn the reference into thanks: ` (#NN — thanks @user!)`. Entries whose PRs involve only the maintainer keep the bare number.
    - Mapping technique: `git blame` the `[Unreleased]` lines, then `git log --merges --ancestry-path <sha>..main` — the earliest merge is the introducing PR. Watch for externally-authored PRs that GitHub marked merged because their commits landed via an internal branch (no own merge commit); credit the original PR alongside the one that carried it.
-   - Cross-check the reverse direction: every merged PR with user-facing impact should have an entry. A contributor's fix missing from the CHANGELOG means missing credit — add the entry.
+   - Cross-check the reverse direction: every merged PR with user-facing impact must be represented, but related PRs can share one bullet. Preserve existing PR references and thanks when consolidating entries; a contributor's fix must not lose its credit.
 6. Also prepare the `bridge/app/build.gradle.kts` version bump: `versionName` → new version, `versionCode` += 1.
 
 If the user specified a version (e.g. `/release 0.10.0`), use that verbatim.
@@ -66,7 +66,7 @@ If the user specified a version (e.g. `/release 0.10.0`), use that verbatim.
 Show:
 - Previous tag → next version
 - Commit list (one line each)
-- Proposed CHANGELOG diff (entries must carry their PR backlinks and contributor thanks from Step 2.5)
+- Proposed CHANGELOG diff (standalone summary, concise user-impact bullets, migration guidance, and PR backlinks and contributor thanks from Step 2.5)
 - Release shape: notarized (default) or ad-hoc fallback (if Step 1.8 failed)
 
 Ask: **"Ship vX.Y.Z with this CHANGELOG?"**
@@ -75,7 +75,7 @@ Accept: yes / no / version override / CHANGELOG edit / "use ad-hoc fallback".
 
 ## Step 4: Apply changes and commit
 
-1. Edit `CHANGELOG.md`: leave `## [Unreleased]` empty, insert `## [X.Y.Z] - YYYY-MM-DD` below it.
+1. Edit `CHANGELOG.md`: leave `## [Unreleased]` empty, insert `## [X.Y.Z] - YYYY-MM-DD` below it with the approved summary and non-empty subsections.
 2. Edit `bridge/app/build.gradle.kts`: bump `versionName` and `versionCode`.
 3. Commit:
    ```bash
