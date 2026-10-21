@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Notarized Homebrew packages retain their original Developer ID signature after installation.
+
+### Fixed
+
+- Homebrew: preserve the upstream signature for notarized releases instead of replacing it with an ad-hoc signature. Release installation checks now use the same formula generator and verify that Homebrew leaves the signed binary unchanged.
+
 ## [0.16.0] - 2026-10-21
 
 Control the iPhone Duo's inner and cover displays and apps in Xcode Resize Mode, with new fold and rotation commands. iOS coordinates now match the `ui` outline by default; scripts that use device-native portrait coordinates must add `--coordinate-space native`. Unicode paste works again with Simulator.app and Device Hub, with safeguards against duplicate or misplaced input.

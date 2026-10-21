@@ -112,6 +112,10 @@ scripts/local-release.sh \
   --tap-dir ../lycorp-jp-homebrew-tap
 ```
 
+For packaging changes, verify the archive with `scripts/verify-brew-install.sh --archive <tarball> --version X.Y.Z --require-developer-id`. It uses the real formula generator under a separate name and installs with `--skip-link`; it must not replace the normal installation or PATH link. Use `--download-url <release-asset-url>` for a second pass through Homebrew's real download path. Existing verification workspaces are refused rather than erased.
+
+The notarized formula must omit `post_install` ad-hoc signing. When regenerating only a formula for an already published archive, pass `--notarized` to `scripts/generate-homebrew-formula.sh` and keep the published URL and SHA256 unchanged. Do not rebuild, retag, or overwrite published assets for a formula-only correction.
+
 If the script fails midway:
 - Bridge build failed → `scripts/build-bridge.sh --check`, see AGENTS.md Android pitfalls
 - Notarization rejected → check `dist/notary-vX.Y.Z.log`
@@ -149,4 +153,4 @@ If the user passes `dry-run` or "preview", run Steps 1-3 only. Show what would h
 - Don't modify build scripts as part of a release run — build behavior changes go through their own commit.
 - Don't auto-resolve git conflicts on CHANGELOG.md.
 - Don't force-push tags.
-- Don't `brew install` the fresh formula on the developer machine.
+- Don't replace the developer's normal brew installation. Use only the separate, unlinked verification formula when testing installation.

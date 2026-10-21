@@ -93,6 +93,8 @@ brew install lycorp-jp/tap/sim-use
 
 On Homebrew 6.0.5+, if you see an "untrusted tap" error, run `brew trust lycorp-jp/tap` first.
 
+Notarized releases keep their upstream Developer ID signature after installation. The ad-hoc signing fallback is only used for legacy, non-notarized release packages.
+
 ### Build from source
 
 sim-use is a Swift package targeting **macOS 14+**, built with the latest Xcode toolchain. It links against static XCFrameworks built from [Meta's idb](https://github.com/facebook/idb), which are produced locally by the build script (they are large and not checked into the repository). The idb checkout generates its Xcode project with [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`).
@@ -116,6 +118,8 @@ make clean
 The XCFrameworks are built without library evolution, so their Swift
 modules are locked to the toolchain that produced them — re-run
 `./scripts/build.sh dev` after switching Xcode versions.
+
+For release packaging changes, `scripts/verify-brew-install.sh --archive <tarball> --version <version> --require-developer-id` tests the generated formula under a separate name without linking it into PATH. Add `--download-url <release-asset-url>` to test a real Homebrew download against the same archive checksum. The verifier checks that the original binary and Developer ID signature survive installation; it does not replace an existing sim-use installation.
 
 ### Xcode 27 (beta)
 

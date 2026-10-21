@@ -395,14 +395,16 @@ ok "sha256: ${SHA256}"
 FORMULA_PATH="$OUTPUT_DIR/sim-use.rb"
 log "Generating formula at ${FORMULA_PATH}..."
 RELEASE_URL="https://github.com/${RELEASE_OWNER}/${RELEASE_REPO}/releases/download/${TAG}/${ASSET_NAME}"
-scripts/generate-homebrew-formula.sh \
-  --formula-class SimUse \
-  --homepage "$HOMEPAGE" \
-  --version "$VERSION" \
-  --url "$RELEASE_URL" \
-  --sha256 "$SHA256" \
-  --license "Apache-2.0" \
-  > "$FORMULA_PATH"
+FORMULA_FLAGS=(
+  --formula-class SimUse
+  --homepage "$HOMEPAGE"
+  --version "$VERSION"
+  --url "$RELEASE_URL"
+  --sha256 "$SHA256"
+  --license "Apache-2.0"
+)
+[[ "$NOTARIZE" == "true" ]] && FORMULA_FLAGS+=(--notarized)
+scripts/generate-homebrew-formula.sh "${FORMULA_FLAGS[@]}" > "$FORMULA_PATH"
 command -v ruby >/dev/null && ruby -c "$FORMULA_PATH" >/dev/null && ok "formula syntax check passed"
 
 # 8. Smoke-test the archive. The notarized path runs the binary as it
@@ -433,7 +435,7 @@ ok "Archive smoke test passed"
 # upload so a failure aborts the release while everything is still
 # local + reversible.
 if [[ "$VERIFY_BREW_INSTALL" == "true" ]]; then
-  VERIFY_FLAGS=()
+  VERIFY_FLAGS=(--archive "$ARCHIVE_PATH" --version "$VERSION")
   # --notarize implies the tarball should keep its Developer ID + spctl
   # acceptance through brew install. Without --notarize, the tarball
   # ships signature-stripped (create-homebrew-archive), so we only
@@ -442,10 +444,7 @@ if [[ "$VERIFY_BREW_INSTALL" == "true" ]]; then
     VERIFY_FLAGS+=(--require-developer-id --require-spctl-accept)
   fi
   log "Running brew install dress rehearsal..."
-  scripts/verify-brew-install.sh \
-    --archive "$ARCHIVE_PATH" \
-    --version "$VERSION" \
-    "${VERIFY_FLAGS[@]}"
+  scripts/verify-brew-install.sh "${VERIFY_FLAGS[@]}"
 fi
 
 # 9. GitHub release upload (optional). If the tag already exists we upload
